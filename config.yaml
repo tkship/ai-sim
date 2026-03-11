@@ -1,0 +1,62 @@
+# 修仙 AI 模拟游戏配置
+
+# AI API 配置
+ai:
+  # API 地址
+  url: "https://api.example.com/v1/chat"
+  # API Key（可选）
+  api_key: ""
+  # 请求格式：openai, anthropic, generic
+  format: "openai"
+  # 模型名称
+  model: "gpt-3.5-turbo"
+  # 请求超时（秒）
+  timeout: 30
+
+# 游戏世界观
+world:
+  name: "灵虚大陆"
+  description: |
+    这是一个修仙者的世界。灵气充盈，修仙者追求长生大道。
+    境界分为炼气、筑基、金丹、元婴、化神等层次。
+    修仙者之间既有合作也有争斗，抢夺资源、争夺机缘是常有之事。
+  # 地图大小（宽 x 高）
+  map_size: [1000, 1000]
+
+# 初始角色配置
+characters:
+  # 初始血量范围
+  health_range: [100, 200]
+  # 初始灵力范围
+  spirit_power_range: [50, 100]
+  # 初始神识范围
+  consciousness_range: [10, 50]
+  # 初始境界
+  default_realm:
+    major: "炼气"
+    minor: "初期"
+
+# 物品配置
+items:
+  # 初始物品列表
+  start_items: ["基础飞剑", "回灵丹", "炼气决"]
+
+# 游戏循环配置
+game:
+  # 每轮时间间隔（毫秒）
+  round_interval: 1000
+  # 是否自动开始
+  auto_start: true
+
+# 界面配置
+ui:
+  # 窗口大小
+  window_size: [1200, 800]
+  # 字体大小
+  font_size: 16
+  # 颜色配置
+  colors:
+    background: "#2c3e50"
+    text: "#ecf0f1"
+    panel: "#34495e"
+    border: "#7f8c8d"
