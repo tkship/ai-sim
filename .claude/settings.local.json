@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(npm install:*)",
+      "Bash(.venv\\\\Scripts\\\\python.exe:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(done)",
+      "Bash(git config:*)",
+      "Bash(git add:*)",
+      "Bash(python:*)"
+    ]
+  }
+}
