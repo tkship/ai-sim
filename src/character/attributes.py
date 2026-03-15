@@ -1,114 +1,124 @@
-"""属性系统模块
-
-包含核心属性和派生属性的计算
 """
+角色属性模块
+"""
+from dataclasses import dataclass
+from typing import Optional
 
 
-from dataclasses import dataclass, field
-from typing import Dict, Any
+@dataclass(frozen=True)
+class Attribute:
+    """不可变属性类"""
+    current: int
+    max: int
+
+    def with_current(self, value: int) -> "Attribute":
+        """返回新的属性对象，设置当前值（在有效范围内）"""
+        new_current = max(0, min(value, self.max))
+        return Attribute(new_current, self.max)
+
+    def with_delta(self, delta: int) -> "Attribute":
+        """返回新的属性对象，应用增量变化"""
+        return self.with_current(self.current + delta)
+
+    def with_max(self, value: int) -> "Attribute":
+        """返回新的属性对象，设置最大值"""
+        new_max = max(1, value)
+        new_current = min(self.current, new_max)
+        return Attribute(new_current, new_max)
+
+    @property
+    def ratio(self) -> float:
+        """当前值占最大值的比例"""
+        if self.max <= 0:
+            return 0.0
+        return self.current / self.max
+
+    def __str__(self) -> str:
+        return f"{self.current}/{self.max}"
 
 
-@dataclass
-class Attributes:
-    """角色属性类
+@dataclass(frozen=True)
+class CharacterAttributes:
+    """角色核心属性（不可变）"""
+    hp: Attribute  # 血量
+    mp: Attribute  # 灵力
+    spirit: Attribute  # 神识
+    statuses: tuple[str, ...] = ()  # 状态效果
 
-    包含核心属性、派生属性和相关计算方法
-    """
-    # 核心属性
-    health: int = 100           # 血量
-    max_health: int = 100       # 最大血量
-    spirit_power: int = 50      # 灵力
-    max_spirit_power: int = 50  # 最大灵力
-    consciousness: int = 20     # 神识
-    luck: int = 10              # 运气
-
-    # 派生属性（计算得出）
-    attack_power: int = field(init=False)
-    defense_power: int = field(init=False)
-    recovery_rate: int = field(init=False)
-
-    def __post_init__(self) -> None:
-        """初始化后计算派生属性"""
-        self._update_derived_attributes()
-
-    def _update_derived_attributes(self) -> None:
-        """更新派生属性"""
-        # 攻击力 = 灵力 * 0.8 + 神识 * 0.2
-        self.attack_power = int(self.spirit_power * 0.8 + self.consciousness * 0.2)
-        # 防御力 = 灵力 * 0.5 + 神识 * 0.5
-        self.defense_power = int(self.spirit_power * 0.5 + self.consciousness * 0.5)
-        # 恢复速率 = 神识 * 0.3 + 运气 * 0.1
-        self.recovery_rate = int(self.consciousness * 0.3 + self.luck * 0.1)
-
-    def apply_delta(self, delta: Dict[str, int]) -> Dict[str, Any]:
-        """应用属性增量变化
-
-        Args:
-            delta: 属性增量字典，例如 {"health": -10, "spirit_power": 5}
-
-        Returns:
-            实际变化的结果字典，包含受限的属性变化
-        """
-        result = {}
-
-        for attr_name, delta_value in delta.items():
-            if not hasattr(self, attr_name):
-                continue
-
-            current_value = getattr(self, attr_name)
-            new_value = current_value + delta_value
-
-            # 处理最大值限制
-            max_attr = f"max_{attr_name}"
-            if hasattr(self, max_attr):
-                max_value = getattr(self, max_attr)
-                new_value = min(max_value, new_value)
-
-            # 确保不小于0
-            new_value = max(0, new_value)
-
-            actual_delta = new_value - current_value
-            setattr(self, attr_name, new_value)
-            result[attr_name] = actual_delta
-
-        # 更新派生属性
-        self._update_derived_attributes()
-
-        return result
-
-    def to_dict(self) -> Dict[str, int]:
-        """转换为字典格式
-
-        Returns:
-            属性字典
-        """
-        return {
-            "health": self.health,
-            "max_health": self.max_health,
-            "spirit_power": self.spirit_power,
-            "max_spirit_power": self.max_spirit_power,
-            "consciousness": self.consciousness,
-            "luck": self.luck,
-            "attack_power": self.attack_power,
-            "defense_power": self.defense_power,
-            "recovery_rate": self.recovery_rate,
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, int]) -> "Attributes":
-        """从字典创建属性对象
-
-        Args:
-            data: 属性字典
-
-        Returns:
-            Attributes 对象
-        """
-        return cls(
-            health=data.get("health", 100),
-            max_health=data.get("max_health", 100),
-            spirit_power=data.get("spirit_power", 50),
-            max_spirit_power=data.get("max_spirit_power", 50),
-            consciousness=data.get("consciousness", 20),
-            luck=data.get("luck", 10),
+    def with_hp_delta(self, delta: int) -> "CharacterAttributes":
+        """应用血量变化"""
+        return CharacterAttributes(
+            hp=self.hp.with_delta(delta),
+            mp=self.mp,
+            spirit=self.spirit,
+            statuses=self.statuses
         )
+
+    def with_mp_delta(self, delta: int) -> "CharacterAttributes":
+        """应用灵力变化"""
+        return CharacterAttributes(
+            hp=self.hp,
+            mp=self.mp.with_delta(delta),
+            spirit=self.spirit,
+            statuses=self.statuses
+        )
+
+    def with_spirit_delta(self, delta: int) -> "CharacterAttributes":
+        """应用神识变化"""
+        return CharacterAttributes(
+            hp=self.hp,
+            mp=self.mp,
+            spirit=self.spirit.with_delta(delta),
+            statuses=self.statuses
+        )
+
+    def with_max_multiplier(self, multiplier: float) -> "CharacterAttributes":
+        """应用最大值倍率（用于境界突破）"""
+        new_hp_max = int(self.hp.max * multiplier)
+        new_mp_max = int(self.mp.max * multiplier)
+        new_spirit_max = int(self.spirit.max * multiplier)
+
+        # 按比例恢复当前值
+        hp_ratio = self.hp.ratio
+        mp_ratio = self.mp.ratio
+        spirit_ratio = self.spirit.ratio
+
+        return CharacterAttributes(
+            hp=Attribute(int(new_hp_max * hp_ratio), new_hp_max),
+            mp=Attribute(int(new_mp_max * mp_ratio), new_mp_max),
+            spirit=Attribute(int(new_spirit_max * spirit_ratio), new_spirit_max),
+            statuses=self.statuses
+        )
+
+    def add_status(self, status: str) -> "CharacterAttributes":
+        """添加状态效果"""
+        if status not in self.statuses:
+            return CharacterAttributes(
+                hp=self.hp,
+                mp=self.mp,
+                spirit=self.spirit,
+                statuses=self.statuses + (status,)
+            )
+        return self
+
+    def remove_status(self, status: str) -> "CharacterAttributes":
+        """移除状态效果"""
+        if status in self.statuses:
+            new_statuses = tuple(s for s in self.statuses if s != status)
+            return CharacterAttributes(
+                hp=self.hp,
+                mp=self.mp,
+                spirit=self.spirit,
+                statuses=new_statuses
+            )
+        return self
+
+    @property
+    def is_alive(self) -> bool:
+        """是否存活"""
+        return self.hp.current > 0
+
+    @property
+    def has_mp(self, amount: int) -> bool:
+        """是否有足够的灵力"""
+        return self.mp.current >= amount

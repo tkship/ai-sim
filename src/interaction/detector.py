@@ -1,190 +1,193 @@
-"""探测系统模块
-
-根据神识计算探测范围，检测并分组角色
 """
-from typing import List, Tuple, Dict
-from character.character import Character
+探测系统模块
+"""
+from typing import List, Set, Tuple
+from dataclasses import dataclass
+from ..character import Character, Position
 
 
-class Detector:
-    """探测系统类
+@dataclass
+class DetectionInfo:
+    """探测信息"""
+    target_id: str
+    target_name: str
+    distance: float
+    realm_estimate: str
+    state_hint: str = ""
 
-    负责检测范围内的角色并进行分组
-    """
 
-    def __init__(self):
-        """初始化探测系统"""
-        pass
+class DetectionSystem:
+    """探测系统"""
 
-    def detect_nearby_characters(
-        self,
-        character: Character,
-        all_characters: List[Character],
-    ) -> List[Tuple[Character, float]]:
-        """探测附近的角色
+    @staticmethod
+    def calculate_detection_range(character: Character) -> float:
+        """
+        计算角色的探测范围
 
         Args:
-            character: 当前角色
+            character: 角色
+
+        Returns:
+            探测范围
+        """
+        base_range = 10.0
+        spirit_bonus = character.attributes.spirit.current * 0.5
+        return base_range + spirit_bonus
+
+    @staticmethod
+    def detect_characters(
+        observer: Character,
+        all_characters: List[Character]
+    ) -> List[DetectionInfo]:
+        """
+        探测范围内的其他角色
+
+        Args:
+            observer: 观察者
             all_characters: 所有角色列表
 
         Returns:
-            附近角色列表，每个元素是 (角色, 距离) 的元组
+            探测到的角色信息列表
         """
-        nearby = []
+        detection_range = DetectionSystem.calculate_detection_range(observer)
+        detected = []
 
-        for other in all_characters:
-            # 跳过自己和死亡的角色
-            if other.id == character.id or not other.is_alive:
+        for target in all_characters:
+            if target.id == observer.id:
                 continue
 
-            # 计算距离
-            distance = self._calculate_distance(character.position, other.position)
+            distance = observer.position.distance_to(target.position)
+            if distance <= detection_range:
+                # 估算目标境界（基于神识差距）
+                realm_estimate = DetectionSystem._estimate_realm(observer, target)
+                state_hint = DetectionSystem._estimate_state(target)
 
-            # 检查是否在探测范围内
-            if distance <= character.detection_range:
-                nearby.append((other, distance))
+                detected.append(DetectionInfo(
+                    target_id=target.id,
+                    target_name=target.name,
+                    distance=distance,
+                    realm_estimate=realm_estimate,
+                    state_hint=state_hint
+                ))
 
         # 按距离排序
-        nearby.sort(key=lambda x: x[1])
+        detected.sort(key=lambda x: x.distance)
+        return detected
 
-        return nearby
+    @staticmethod
+    def _estimate_realm(observer: Character, target: Character) -> str:
+        """估算目标境界"""
+        observer_realm = observer.realm
+        target_realm = target.realm
 
-    def _calculate_distance(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
-        """计算两点之间的距离（欧几里得距离）
+        if target_realm > observer_realm:
+            return "深不可测"
+        elif target_realm == observer_realm:
+            return f"{target_realm.full_name}（相当）"
+        elif target_realm < observer_realm:
+            return f"{target_realm.full_name}（较低）"
+        return target_realm.full_name
+
+    @staticmethod
+    def _estimate_state(target: Character) -> str:
+        """估算目标状态"""
+        hints = []
+
+        hp_ratio = target.attributes.hp.ratio
+        if hp_ratio < 0.3:
+            hints.append("伤势严重")
+        elif hp_ratio < 0.6:
+            hints.append("有伤在身")
+
+        mp_ratio = target.attributes.mp.ratio
+        if mp_ratio < 0.3:
+            hints.append("灵力不足")
+
+        if target.attributes.statuses:
+            hints.append("状态异常")
+
+        return "，".join(hints) if hints else "状态正常"
+
+
+class InteractionGroup:
+    """交互组"""
+
+    def __init__(self, characters: List[Character]):
+        self.characters = characters
+        self.group_id = "_".join(sorted(c.id for c in characters))
+
+    @property
+    def size(self) -> int:
+        return len(self.characters)
+
+
+class InteractionDetector:
+    """交互检测器"""
+
+    @staticmethod
+    def form_groups(characters: List[Character]) -> List[InteractionGroup]:
+        """
+        形成交互组
 
         Args:
-            pos1: 位置1
-            pos2: 位置2
+            characters: 所有角色
 
         Returns:
-            距离
+            交互组列表
         """
-        import math
-        return math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
+        # 构建邻接关系
+        adjacency = {c.id: set() for c in characters}
+        char_map = {c.id: c for c in characters}
 
-    def group_characters(
-        self,
-        characters: List[Character],
-    ) -> List[List[Character]]:
-        """将角色分组
+        for observer in characters:
+            detected = DetectionSystem.detect_characters(observer, characters)
+            for info in detected:
+                adjacency[observer.id].add(info.target_id)
+                adjacency[info.target_id].add(observer.id)
 
-        根据探测范围将角色分组为互相探测到的组
+        # 使用连通分量找交互组
+        visited = set()
+        groups = []
+
+        for char_id in char_map:
+            if char_id not in visited:
+                # BFS 找连通分量
+                component = []
+                queue = [char_id]
+                visited.add(char_id)
+
+                while queue:
+                    current = queue.pop(0)
+                    component.append(current)
+                    for neighbor in adjacency[current]:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+
+                if len(component) >= 2:
+                    group_chars = [char_map[cid] for cid in component]
+                    groups.append(InteractionGroup(group_chars))
+
+        return groups
+
+    @staticmethod
+    def get_independent_characters(
+        all_characters: List[Character],
+        groups: List[InteractionGroup]
+    ) -> List[Character]:
+        """
+        获取独立角色（不在任何交互组中）
 
         Args:
-            characters: 所有角色列表
+            all_characters: 所有角色
+            groups: 交互组列表
 
         Returns:
-            分组后的角色列表
+            独立角色列表
         """
-        if not characters:
-            return []
+        grouped_ids = set()
+        for group in groups:
+            for c in group.characters:
+                grouped_ids.add(c.id)
 
-        # 只考虑存活的角色
-        alive_chars = [c for c in characters if c.is_alive]
-
-        if not alive_chars:
-            return []
-
-        # 使用并查集进行分组
-        parent = {char.id: char.id for char in alive_chars}
-
-        def find(char_id: str) -> str:
-            """查找并查集的根节点"""
-            if parent[char_id] != char_id:
-                parent[char_id] = find(parent[char_id])
-            return parent[char_id]
-
-        def union(char_id1: str, char_id2: str) -> None:
-            """合并两个节点的集合"""
-            root1 = find(char_id1)
-            root2 = find(char_id2)
-            if root1 != root2:
-                parent[root2] = root1
-
-        # 检测互相能探测到的角色对
-        for i, char1 in enumerate(alive_chars):
-            for j in range(i + 1, len(alive_chars)):
-                char2 = alive_chars[j]
-
-                # 检查两者是否互相能探测到
-                distance = self._calculate_distance(char1.position, char2.position)
-                if (distance <= char1.detection_range or
-                    distance <= char2.detection_range):
-                    union(char1.id, char2.id)
-
-        # 按分组收集角色
-        groups = {}
-        for char in alive_chars:
-            root = find(char.id)
-            if root not in groups:
-                groups[root] = []
-            groups[root].append(char)
-
-        return list(groups.values())
-
-    def get_group_info_for_ai(
-        self,
-        character: Character,
-        nearby_characters: List[Tuple[Character, float]],
-    ) -> List[Dict]:
-        """获取附近角色信息，用于 AI 提示词
-
-        Args:
-            character: 当前角色
-            nearby_characters: 附近角色列表
-
-        Returns:
-            角色信息字典列表
-        """
-        result = []
-        for other, distance in nearby_characters:
-            info = other.get_info_for_ai()
-            info["distance"] = distance
-            result.append(info)
-
-        return result
-
-    def is_in_same_group(
-        self,
-        char1: Character,
-        char2: Character,
-        max_distance: float = None,
-    ) -> bool:
-        """检查两个角色是否在同一组（互相能探测到）
-
-        Args:
-            char1: 角色1
-            char2: 角色2
-            max_distance: 最大距离，如果为 None 则使用两者的探测范围
-
-        Returns:
-            是否在同一组
-        """
-        distance = self._calculate_distance(char1.position, char2.position)
-
-        if max_distance is not None:
-            return distance <= max_distance
-        else:
-            return (distance <= char1.detection_range or
-                    distance <= char2.detection_range)
-
-    def create_interaction_pairs(
-        self,
-        group: List[Character],
-    ) -> List[Tuple[Character, Character]]:
-        """创建交互对
-
-        对于一个分组，创建所有可能的角色对
-
-        Args:
-            group: 角色分组
-
-        Returns:
-            角色对列表
-        """
-        pairs = []
-        for i, char1 in enumerate(group):
-            for j in range(i + 1, len(group)):
-                char2 = group[j]
-                pairs.append((char1, char2))
-        return pairs
+        return [c for c in all_characters if c.id not in grouped_ids]

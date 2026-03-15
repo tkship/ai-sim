@@ -1,290 +1,309 @@
-"""角色类模块
-
-整合属性、物品、记忆等模块，管理角色的完整状态
+"""
+角色类模块 - 整合所有角色功能
 """
 from dataclasses import dataclass, field
-from typing import Dict, Optional, List
-import uuid
-from datetime import datetime
-
-from .attributes import Attributes
-from .realm import Realm
-from .inventory import Inventory
-from .memory import Memory, MemoryType
+from typing import Optional, Any
+from .attributes import CharacterAttributes, Attribute
+from .realm import Realm, MajorRealm, MinorRealm
+from .spirit_root import SpiritRoot, Element
+from .memory import MemoryBank
 
 
-class CharacterState(str):
-    """角色状态枚举"""
-    IDLE = "idle"          # 闲置
-    MEDITATING = "meditating"  # 打坐修炼
-    COMBAT = "combat"      # 战斗中
-    MOVING = "moving"      # 移动中
-    EXPLORING = "exploring"    # 探索中
-    DEAD = "dead"          # 已死亡
+@dataclass(frozen=True)
+class Position:
+    """位置"""
+    x: float = 0.0
+    y: float = 0.0
+
+    def distance_to(self, other: "Position") -> float:
+        """计算到另一个位置的距离"""
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
+
+    def with_position(self, x: float, y: float) -> "Position":
+        """返回新的位置"""
+        return Position(x, y)
 
 
 @dataclass
 class Character:
-    """角色类
+    """角色类（整合所有功能）"""
+    id: str
+    name: str
 
-    修仙者的完整表示
-    """
-    # 基本信息
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = "无名修仙者"
+    # 核心属性
+    attributes: CharacterAttributes
+    realm: Realm
+    spirit_root: SpiritRoot
 
-    # 系统组件
-    attributes: Attributes = field(default_factory=Attributes)
-    realm: Realm = field(default_factory=Realm)
-    inventory: Inventory = field(default_factory=Inventory)
-    memory: Memory = field(default_factory=Memory)
+    # 记忆和目标
+    memory_bank: MemoryBank
 
-    # 位置信息
-    position: tuple = (0, 0)
-    detection_range: int = 100  # 探测范围
+    # 位置
+    position: Position = field(default_factory=Position)
 
-    # 状态
-    state: str = CharacterState.IDLE
-    is_alive: bool = True
-    death_time: Optional[datetime] = None
+    # 修炼的功法（名称 -> 当前等级）
+    techniques: dict[str, int] = field(default_factory=dict)
 
-    # 创建时间
-    created_at: datetime = field(default_factory=datetime.now)
+    # 物品栏（名称 -> 数量）
+    inventory: dict[str, int] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
-        """初始化后更新探测范围"""
-        self._update_detection_range()
+    # 装备的法宝（槽位 -> 法宝名称）
+    equipment: dict[str, str] = field(default_factory=dict)
 
-    def _update_detection_range(self) -> None:
-        """根据神识更新探测范围"""
-        self.detection_range = self.attributes.consciousness * 10
+    # 战斗相关
+    combat_insight: float = 0.0  # 战斗感悟加成
+    breakthrough_bonus: float = 0.0  # 突破临时加成
+
+    def __post_init__(self):
+        if not hasattr(self, "memory_bank") or self.memory_bank is None:
+            object.__setattr__(self, "memory_bank", MemoryBank(self.id))
 
     @property
-    def total_attack_power(self) -> int:
-        """获取总攻击力（包含装备加成、境界加成）"""
-        base = self.attributes.attack_power
-        bonus = self.inventory.get_equipped_bonus()
-        return int((base + bonus["attack_power"]) * self.realm.power_bonus)
+    def is_alive(self) -> bool:
+        """是否存活"""
+        return self.attributes.is_alive
 
     @property
-    def total_defense_power(self) -> int:
-        """获取总防御力（包含装备加成、境界加成）"""
-        base = self.attributes.defense_power
-        bonus = self.inventory.get_equipped_bonus()
-        return int((base + bonus["defense_power"]) * self.realm.power_bonus)
+    def detection_range(self) -> float:
+        """探测范围（基于神识）"""
+        base_range = 10.0
+        spirit_bonus = self.attributes.spirit.current * 0.5
+        return base_range + spirit_bonus
 
-    @property
-    def total_spirit_power(self) -> int:
-        """获取总灵力（包含装备加成）"""
-        base = self.attributes.spirit_power
-        bonus = self.inventory.get_equipped_bonus()
-        return base + bonus["spirit_power"]
+    def can_detect(self, other: "Character") -> bool:
+        """是否能探测到另一个角色"""
+        distance = self.position.distance_to(other.position)
+        return distance <= self.detection_range
 
-    def apply_attribute_delta(self, delta: Dict[str, int]) -> Dict[str, int]:
-        """应用属性增量
-
-        Args:
-            delta: 属性增量字典
-
-        Returns:
-            实际变化结果
-        """
-        result = self.attributes.apply_delta(delta)
-
-        # 更新探测范围
-        self._update_detection_range()
-
-        return result
-
-    def add_memory(self, memory_type: str, description: str,
-                   related_character_ids: List[str] = None,
-                   data: Dict = None) -> None:
-        """添加记忆
-
-        Args:
-            memory_type: 记忆类型
-            description: 描述
-            related_character_ids: 相关角色ID列表
-            data: 附加数据
-        """
-        self.memory.add_entry(
-            memory_type=memory_type,
-            description=description,
-            related_character_ids=related_character_ids,
-            data=data,
+    def with_attributes(self, attributes: CharacterAttributes) -> "Character":
+        """返回新角色，更新属性"""
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=self.inventory.copy(),
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=self.breakthrough_bonus
         )
 
-    def take_damage(self, damage: int) -> int:
-        """承受伤害
-
-        Args:
-            damage: 伤害值
-
-        Returns:
-            实际受到的伤害
-        """
-        # 考虑防御力
-        actual_damage = max(0, damage - self.total_defense_power)
-
-        # 应用伤害
-        result = self.apply_attribute_delta({"health": -actual_damage})
-
-        # 检查死亡
-        if self.attributes.health <= 0:
-            self.die()
-
-        return actual_damage
-
-    def heal(self, amount: int) -> int:
-        """治疗
-
-        Args:
-            amount: 治疗量
-
-        Returns:
-            实际恢复的数值
-        """
-        result = self.apply_attribute_delta({"health": amount})
-        return result.get("health", 0)
-
-    def restore_spirit_power(self, amount: int) -> int:
-        """恢复灵力
-
-        Args:
-            amount: 恢复量
-
-        Returns:
-            实际恢复的数值
-        """
-        result = self.apply_attribute_delta({"spirit_power": amount})
-        return result.get("spirit_power", 0)
-
-    def try_realm_advance(self) -> bool:
-        """尝试境界提升
-
-        Returns:
-            是否成功
-        """
-        success = self.realm.try_advance()
-        if success:
-            self.add_memory(
-                memory_type=MemoryType.REALM_ADVANCE,
-                description=f"境界提升至{self.realm.name}",
-                data={"new_realm": self.realm.to_dict()},
-            )
-        return success
-
-    def die(self) -> None:
-        """死亡"""
-        self.is_alive = False
-        self.state = CharacterState.DEAD
-        self.death_time = datetime.now()
-
-        self.add_memory(
-            memory_type=MemoryType.DEATH,
-            description=f"{self.name} 在 {self.death_time.strftime('%Y-%m-%d %H:%M:%S')} 身陨",
+    def with_position(self, x: float, y: float) -> "Character":
+        """返回新角色，更新位置"""
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=self.attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=Position(x, y),
+            techniques=self.techniques.copy(),
+            inventory=self.inventory.copy(),
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=self.breakthrough_bonus
         )
 
-    def revive(self) -> None:
-        """复活（测试用）"""
-        self.is_alive = True
-        self.state = CharacterState.IDLE
-        self.death_time = None
-        self.attributes.health = self.attributes.max_health // 2  # 复活时恢复50%血量
+    def with_realm(self, realm: Realm) -> "Character":
+        """返回新角色，更新境界"""
+        # 计算新的属性倍率
+        new_attributes = self.attributes.with_max_multiplier(realm.hp_multiplier / self.realm.hp_multiplier)
 
-    def to_dict(self) -> dict:
-        """转换为字典"""
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=new_attributes,
+            realm=realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=self.inventory.copy(),
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=self.breakthrough_bonus
+        )
+
+    def add_item(self, item_name: str, count: int = 1) -> "Character":
+        """添加物品"""
+        new_inventory = self.inventory.copy()
+        new_inventory[item_name] = new_inventory.get(item_name, 0) + count
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=self.attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=new_inventory,
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=self.breakthrough_bonus
+        )
+
+    def remove_item(self, item_name: str, count: int = 1) -> "Character":
+        """移除物品"""
+        new_inventory = self.inventory.copy()
+        current = new_inventory.get(item_name, 0)
+        if current <= count:
+            new_inventory.pop(item_name, None)
+        else:
+            new_inventory[item_name] = current - count
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=self.attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=new_inventory,
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=self.breakthrough_bonus
+        )
+
+    def equip_item(self, slot: str, item_name: str) -> "Character":
+        """装备物品"""
+        new_equipment = self.equipment.copy()
+        new_equipment[slot] = item_name
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=self.attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=self.inventory.copy(),
+            equipment=new_equipment,
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=self.breakthrough_bonus
+        )
+
+    def add_combat_insight(self, bonus: float) -> "Character":
+        """添加战斗感悟"""
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=self.attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=self.inventory.copy(),
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight + bonus,
+            breakthrough_bonus=self.breakthrough_bonus
+        )
+
+    def add_breakthrough_bonus(self, bonus: float) -> "Character":
+        """添加临时突破加成"""
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=self.attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=self.inventory.copy(),
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=self.breakthrough_bonus + bonus
+        )
+
+    def clear_breakthrough_bonus(self) -> "Character":
+        """清除临时突破加成"""
+        return Character(
+            id=self.id,
+            name=self.name,
+            attributes=self.attributes,
+            realm=self.realm,
+            spirit_root=self.spirit_root,
+            memory_bank=self.memory_bank,
+            position=self.position,
+            techniques=self.techniques.copy(),
+            inventory=self.inventory.copy(),
+            equipment=self.equipment.copy(),
+            combat_insight=self.combat_insight,
+            breakthrough_bonus=0.0
+        )
+
+    def to_prompt_dict(self) -> dict[str, Any]:
+        """转换为提示词字典"""
         return {
             "id": self.id,
             "name": self.name,
-            "attributes": self.attributes.to_dict(),
-            "realm": self.realm.to_dict(),
-            "inventory": self.inventory.to_dict(),
-            "memory": self.memory.to_dict(),
-            "position": self.position,
-            "detection_range": self.detection_range,
-            "state": self.state,
-            "is_alive": self.is_alive,
-            "death_time": self.death_time.isoformat() if self.death_time else None,
-            "created_at": self.created_at.isoformat(),
-            "total_attack_power": self.total_attack_power,
-            "total_defense_power": self.total_defense_power,
-            "total_spirit_power": self.total_spirit_power,
+            "realm": self.realm.full_name,
+            "spirit_root": self.spirit_root.display_name,
+            "hp": str(self.attributes.hp),
+            "mp": str(self.attributes.mp),
+            "spirit": str(self.attributes.spirit),
+            "statuses": list(self.attributes.statuses),
+            "position": {"x": self.position.x, "y": self.position.y},
+            "techniques": self.techniques,
+            "inventory": self.inventory,
+            "equipment": self.equipment,
         }
 
-    def get_info_for_ai(self) -> dict:
-        """获取AI所需的角色信息
+    @staticmethod
+    def create(
+        char_id: str,
+        name: str,
+        base_hp: int = 50,
+        base_mp: int = 30,
+        base_spirit: int = 20,
+        realm: Optional[Realm] = None,
+        spirit_root: Optional[SpiritRoot] = None
+    ) -> "Character":
+        """
+        创建新角色
+
+        Args:
+            char_id: 角色ID
+            name: 角色名称
+            base_hp: 基础血量
+            base_mp: 基础灵力
+            base_spirit: 基础神识
+            realm: 境界（默认为炼气初期）
+            spirit_root: 灵根（默认为金单灵根）
 
         Returns:
-            结构化的角色信息
+            角色对象
         """
-        return {
-            "id": self.id,
-            "name": self.name,
-            "state": self.state,
-            "realm": self.realm.name,
-            "health": self.attributes.health,
-            "max_health": self.attributes.max_health,
-            "health_percent": self.attributes.health / self.attributes.max_health,
-            "spirit_power": self.attributes.spirit_power,
-            "max_spirit_power": self.attributes.max_spirit_power,
-            "spirit_power_percent": self.attributes.spirit_power / self.attributes.max_spirit_power,
-            "consciousness": self.attributes.consciousness,
-            "attack_power": self.total_attack_power,
-            "defense_power": self.total_defense_power,
-            "detection_range": self.detection_range,
-            "items": [item.display_info for item in self.inventory.items],
-            "equipped_artifact": self.inventory.equipped_artifact.name if self.inventory.equipped_artifact else None,
-            "equipped_technique": self.inventory.equipped_technique.name if self.inventory.equipped_technique else None,
-            "recent_memories": [entry.description for entry in self.memory.get_recent_memories(5)],
-        }
+        if realm is None:
+            realm = Realm(MajorRealm.QI_REFINING, MinorRealm.EARLY)
+        if spirit_root is None:
+            spirit_root = SpiritRoot.create_single(Element.METAL)
 
+        # 应用境界倍率
+        hp_max = int(base_hp * realm.hp_multiplier)
+        mp_max = int(base_mp * realm.mp_multiplier)
+        spirit_max = int(base_spirit * 1.0)
 
-def create_character(
-    name: str,
-    health: int = 100,
-    spirit_power: int = 50,
-    consciousness: int = 20,
-    position: tuple = (0, 0),
-    start_items: List[str] = None,
-) -> Character:
-    """创建角色辅助函数
+        attributes = CharacterAttributes(
+            hp=Attribute(hp_max, hp_max),
+            mp=Attribute(mp_max, mp_max),
+            spirit=Attribute(spirit_max, spirit_max)
+        )
 
-    Args:
-        name: 角色名称
-        health: 初始血量
-        spirit_power: 初始灵力
-        consciousness: 初始神识
-        position: 位置
-        start_items: 初始物品列表
-
-    Returns:
-        角色对象
-    """
-    if start_items is None:
-        start_items = []
-
-    character = Character(
-        name=name,
-        attributes=Attributes(
-            health=health,
-            max_health=health,
-            spirit_power=spirit_power,
-            max_spirit_power=spirit_power,
-            consciousness=consciousness,
-        ),
-        position=position,
-    )
-
-    # 添加初始物品
-    for item_name in start_items:
-        character.inventory.add_item_by_name(item_name)
-
-    # 自动装备第一个法宝和功法
-    for item in character.inventory.items:
-        if item.item_type.value == "法宝" and character.inventory.equipped_artifact is None:
-            character.inventory.equip_item(item.id)
-        elif item.item_type.value == "功法" and character.inventory.equipped_technique is None:
-            character.inventory.equip_item(item.id)
-
-    return character
+        return Character(
+            id=char_id,
+            name=name,
+            attributes=attributes,
+            realm=realm,
+            spirit_root=spirit_root,
+            memory_bank=MemoryBank(char_id)
+        )

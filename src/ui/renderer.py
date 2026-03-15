@@ -1,359 +1,209 @@
-"""场景渲染模块
-
-渲染游戏场景、角色位置可视化等
+"""
+UI 渲染器模块
 """
 import pygame
-import math
-from typing import TYPE_CHECKING
-from game.world import World
-
-if TYPE_CHECKING:
-    from ui.display import Display
-else:
-    Display = object
+from typing import Optional, List
+from ..character import Character
 
 
-class SceneRenderer:
-    """场景渲染器
+class Colors:
+    """颜色定义"""
+    BLACK = (0, 0, 0)
+    WHITE = (255, 255, 255)
+    GRAY = (128, 128, 128)
+    DARK_GRAY = (64, 64, 64)
+    LIGHT_GRAY = (192, 192, 192)
+    RED = (255, 0, 0)
+    GREEN = (0, 255, 0)
+    BLUE = (0, 0, 255)
+    GOLD = (255, 215, 0)
+    CYAN = (0, 255, 255)
 
-    负责渲染游戏场景和角色
-    """
 
-    def __init__(self, display: Display):
-        """初始化场景渲染器
+class UIRenderer:
+    """UI 渲染器"""
 
-        Args:
-            display: 主显示对象
-        """
-        self.display = display
+    def __init__(self, screen_width: int = 1200, screen_height: int = 800):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.screen: Optional[pygame.Surface] = None
+        self.fonts: dict[str, pygame.font.Font] = {}
+        self.clock = pygame.time.Clock()
 
-        # 场景区域
-        self.scene_rect = (300, 120, 600, 500)
+    def init(self) -> None:
+        """初始化 pygame 和 UI"""
+        pygame.init()
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        pygame.display.set_caption("修仙 AI 模拟器")
 
-        # 角色颜色
-        self.character_colors = {
-            0: (231, 76, 60),    # 红色
-            1: (46, 204, 113),   # 绿色
-            2: (52, 152, 219),   # 蓝色
-            3: (241, 196, 15),   # 黄色
-        }
+        # 初始化字体
+        self.fonts["small"] = pygame.font.SysFont("SimHei", 16)
+        self.fonts["normal"] = pygame.font.SysFont("SimHei", 20)
+        self.fonts["large"] = pygame.font.SysFont("SimHei", 28)
+        self.fonts["title"] = pygame.font.SysFont("SimHei", 36, bold=True)
 
-    def render(self, world: World) -> None:
-        """渲染场景
+    def clear(self) -> None:
+        """清屏"""
+        if self.screen:
+            self.screen.fill(Colors.BLACK)
 
-        Args:
-            world: 游戏世界
-        """
-        if not self.display.screen:
+    def present(self) -> None:
+        """刷新显示"""
+        if self.screen:
+            pygame.display.flip()
+            self.clock.tick(30)
+
+    def draw_text(
+        self,
+        text: str,
+        x: int,
+        y: int,
+        color: tuple = Colors.WHITE,
+        font_size: str = "normal",
+        align: str = "left"
+    ) -> None:
+        """绘制文本"""
+        if not self.screen or text is None:
             return
 
-        # 绘制场景背景
-        self._draw_scene_background()
+        font = self.fonts.get(font_size, self.fonts["normal"])
+        text_surface = font.render(str(text), True, color)
 
-        # 绘制角色
-        self._draw_characters(world)
+        if align == "center":
+            x = x - text_surface.get_width() // 2
+        elif align == "right":
+            x = x - text_surface.get_width()
 
-        # 绘制场景边框
-        self.display.draw_rect(self.scene_rect, self.display.colors["border"], 2)
+        self.screen.blit(text_surface, (x, y))
 
-        # 绘制场景标题
-        self._draw_scene_title(world)
-
-    def _draw_scene_background(self) -> None:
-        """绘制场景背景"""
-        # 绘制深色背景
-        self.display.draw_rect(self.scene_rect, (30, 30, 40))
-
-        # 绘制网格（可选）
-        x, y, width, height = self.scene_rect
-        grid_size = 50
-
-        # 垂直线
-        for i in range(0, width, grid_size):
-            line_x = x + i
-            pygame.draw.line(
-                self.display.screen,
-                (50, 50, 60),
-                (line_x, y),
-                (line_x, y + height),
-                1,
-            )
-
-        # 水平线
-        for i in range(0, height, grid_size):
-            line_y = y + i
-            pygame.draw.line(
-                self.display.screen,
-                (50, 50, 60),
-                (x, line_y),
-                (x + width, line_y),
-                1,
-            )
-
-    def _draw_characters(self, world: World) -> None:
-        """绘制角色
-
-        Args:
-            world: 游戏世界
-        """
-        characters = world.characters
-        if not characters:
+    def draw_panel(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        title: str = "",
+        color: tuple = Colors.DARK_GRAY
+    ) -> None:
+        """绘制面板"""
+        if not self.screen:
             return
 
-        # 获取世界地图大小
-        map_width, map_height = world.config.world.map_size
+        # 面板背景
+        pygame.draw.rect(self.screen, color, (x, y, width, height))
+        # 面板边框
+        pygame.draw.rect(self.screen, Colors.GRAY, (x, y, width, height), 2)
 
-        # 场景区域
-        scene_x, scene_y, scene_width, scene_height = self.scene_rect
+        # 标题
+        if title:
+            self.draw_text(title, x + 10, y + 5, Colors.GOLD, "large")
 
-        # 计算缩放比例
-        scale_x = scene_width / map_width
-        scale_y = scene_height / map_height
-        scale = min(scale_x, scale_y)
-
-        # 居中偏移
-        offset_x = scene_x + (scene_width - map_width * scale) / 2
-        offset_y = scene_y + (scene_height - map_height * scale) / 2
-
-        # 绘制每个角色
-        for i, char in enumerate(characters):
-            # 将角色位置转换到场景坐标
-            char_x = offset_x + char.position[0] * scale
-            char_y = offset_y + char.position[1] * scale
-
-            # 确定角色颜色
-            color = self.character_colors.get(i, self.display.colors["white"])
-
-            # 绘制探测范围（半透明）
-            self._draw_detection_range(char_x, char_y, char, scale)
-
-            # 绘制角色圆点
-            radius = 8
-            pygame.draw.circle(
-                self.display.screen,
-                color,
-                (int(char_x), int(char_y)),
-                radius,
-            )
-
-            # 绘制角色名称
-            name_text = char.name[:2]  # 只显示前两个字符
-            self.display.draw_text(
-                name_text,
-                (int(char_x) - 10, int(char_y) - 20),
-                color,
-            )
-
-            # 如果角色死亡，绘制死亡标记
-            if not char.is_alive:
-                self._draw_dead_mark(int(char_x), int(char_y))
-
-    def _draw_detection_range(self, x: float, y: float, char, scale: float) -> None:
-        """绘制探测范围
-
-        Args:
-            x: 角色X坐标
-            y: 角色Y坐标
-            char: 角色对象
-            scale: 缩放比例
-        """
-        # 计算探测范围的半径
-        detection_radius = char.detection_range * scale
-
-        # 创建一个带透明度的表面
-        surface = pygame.Surface(
-            (int(detection_radius * 2), int(detection_radius * 2)),
-            pygame.SRCALPHA,
-        )
-
-        # 绘制半透明圆
-        pygame.draw.circle(
-            surface,
-            (100, 100, 100, 30),
-            (int(detection_radius), int(detection_radius)),
-            int(detection_radius),
-        )
-
-        # 将表面绘制到屏幕
-        self.display.screen.blit(
-            surface,
-            (int(x - detection_radius), int(y - detection_radius)),
-        )
-
-    def _draw_dead_mark(self, x: int, y: int) -> None:
-        """绘制死亡标记
-
-        Args:
-            x: X坐标
-            y: Y坐标
-        """
-        # 绘制X形标记
-        offset = 5
-        pygame.draw.line(
-            self.display.screen,
-            self.display.colors["red"],
-            (x - offset, y - offset),
-            (x + offset, y + offset),
-            2,
-        )
-        pygame.draw.line(
-            self.display.screen,
-            self.display.colors["red"],
-            (x + offset, y - offset),
-            (x - offset, y + offset),
-            2,
-        )
-
-    def _draw_scene_title(self, world: World) -> None:
-        """绘制场景标题
-
-        Args:
-            world: 游戏世界
-        """
-        scene_x, scene_y, scene_width, scene_height = self.scene_rect
-
-        # 标题位置
-        title_x = scene_x + 10
-        title_y = scene_y + 10
-
-        # 绘制标题背景
-        title_rect = (title_x - 5, title_y - 5, 200, 25)
-        self.display.draw_rect(title_rect, (40, 40, 50))
-
-        # 绘制标题
-        title_text = f"场景 - {world.config.world.name}"
-        self.display.draw_text(
-            title_text,
-            (title_x, title_y),
-            self.display.colors["yellow"],
-        )
-
-
-class MapRenderer:
-    """地图渲染器
-
-    负责渲染世界地图
-    """
-
-    def __init__(self, display: Display):
-        """初始化地图渲染器
-
-        Args:
-            display: 主显示对象
-        """
-        self.display = display
-
-    def render(self, world: World, rect: tuple) -> None:
-        """渲染地图
-
-        Args:
-            world: 游戏世界
-            rect: 地图区域 (x, y, width, height)
-        """
-        # 绘制地图背景
-        self.display.draw_rect(rect, (40, 40, 50))
-
-        # 绘制边框
-        self.display.draw_rect(rect, self.display.colors["border"], 2)
-
-        # 绘制角色点
-        self._draw_character_dots(world, rect)
-
-    def _draw_character_dots(self, world: World, rect: tuple) -> None:
-        """绘制角色点
-
-        Args:
-            world: 游戏世界
-            rect: 地图区域
-        """
-        characters = world.characters
-        if not characters:
+    def draw_progress_bar(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        current: int,
+        maximum: int,
+        color: tuple = Colors.GREEN,
+        label: str = ""
+    ) -> None:
+        """绘制进度条"""
+        if not self.screen:
             return
 
-        # 获取世界地图大小
-        map_width, map_height = world.config.world.map_size
+        # 背景
+        pygame.draw.rect(self.screen, Colors.DARK_GRAY, (x, y, width, height))
+        pygame.draw.rect(self.screen, Colors.GRAY, (x, y, width, height), 1)
 
-        # 地图区域
-        map_x, map_y, map_width_ui, map_height_ui = rect
+        # 进度
+        ratio = min(1.0, max(0.0, current / maximum if maximum > 0 else 0))
+        progress_width = int(width * ratio)
+        pygame.draw.rect(self.screen, color, (x + 1, y + 1, progress_width - 2, height - 2))
 
-        # 计算缩放比例
-        scale_x = map_width_ui / map_width
-        scale_y = map_height_ui / map_height
-        scale = min(scale_x, scale_y)
+        # 标签
+        if label:
+            label_text = f"{label}: {current}/{maximum}"
+            self.draw_text(label_text, x + width // 2, y + height // 2 - 8, Colors.WHITE, "small", "center")
 
-        # 居中偏移
-        offset_x = map_x + (map_width_ui - map_width * scale) / 2
-        offset_y = map_y + (map_height_ui - map_height * scale) / 2
+    def draw_character_info(self, character: Character, x: int, y: int, width: int) -> None:
+        """绘制角色信息面板"""
+        if not self.screen:
+            return
 
-        # 绘制每个角色
-        for i, char in enumerate(characters):
-            # 计算角色位置
-            char_x = offset_x + char.position[0] * scale
-            char_y = offset_y + char.position[1] * scale
+        panel_height = 200
+        self.draw_panel(x, y, width, panel_height, f"【{character.name}】")
 
-            # 确定颜色
-            if not char.is_alive:
-                color = self.display.colors["red"]
-            else:
-                color = self.display.colors["green"]
+        # 境界
+        self.draw_text(f"境界: {character.realm.full_name}", x + 10, y + 40, Colors.CYAN)
+        self.draw_text(f"灵根: {character.spirit_root.display_name}", x + 10, y + 65, Colors.CYAN)
 
-            # 绘制点
-            pygame.draw.circle(
-                self.display.screen,
-                color,
-                (int(char_x), int(char_y)),
-                3,
-            )
+        # 进度条
+        bar_width = width - 20
+        bar_x = x + 10
 
+        # 血量
+        hp_color = Colors.RED if character.attributes.hp.ratio < 0.3 else Colors.GREEN
+        self.draw_progress_bar(bar_x, y + 95, bar_width, 20,
+                                character.attributes.hp.current, character.attributes.hp.max,
+                                hp_color, "血量")
 
-class TextSceneRenderer:
-    """文本场景渲染器
+        # 灵力
+        self.draw_progress_bar(bar_x, y + 125, bar_width, 20,
+                                character.attributes.mp.current, character.attributes.mp.max,
+                                Colors.BLUE, "灵力")
 
-    使用文字描述场景状态（简单版本）
-    """
+        # 神识
+        self.draw_progress_bar(bar_x, y + 155, bar_width, 20,
+                                character.attributes.spirit.current, character.attributes.spirit.max,
+                                Colors.GOLD, "神识")
 
-    def __init__(self, display: Display):
-        """初始化文本场景渲染器
+    def draw_scene_log(self, logs: List[str], x: int, y: int, width: int, height: int) -> None:
+        """绘制场景日志"""
+        if not self.screen:
+            return
 
-        Args:
-            display: 主显示对象
-        """
-        self.display = display
+        self.draw_panel(x, y, width, height, "【场景描述】")
 
-    def render(self, world: World, rect: tuple) -> None:
-        """渲染文本场景
+        line_y = y + 40
+        line_height = 25
+        max_lines = (height - 50) // line_height
 
-        Args:
-            world: 游戏世界
-            rect: 渲染区域
-        """
-        x, y, width, height = rect
+        # 只显示最近的日志
+        recent_logs = logs[-max_lines:] if logs else []
 
-        # 绘制背景
-        self.display.draw_rect(rect, (30, 30, 40))
-        self.display.draw_rect(rect, self.display.colors["border"], 2)
+        for i, log in enumerate(recent_logs):
+            self.draw_text(log, x + 10, line_y + i * line_height, Colors.WHITE, "small")
 
-        # 绘制标题
-        self.display.draw_text(
-            "=== 场景状态 ===",
-            (x + 10, y + 10),
-            self.display.colors["yellow"],
-        )
+    def draw_inventory(self, character: Character, x: int, y: int, width: int, height: int) -> None:
+        """绘制物品栏"""
+        if not self.screen:
+            return
 
-        # 绘制角色信息
-        characters = world.characters
-        current_y = y + 40
+        self.draw_panel(x, y, width, height, "【物品栏】")
 
-        for char in characters:
-            status = "存活" if char.is_alive else "死亡"
-            info = f"{char.name}: {status}, 位置({char.position[0]}, {char.position[1]}), 境界{char.realm.name}"
+        line_y = y + 40
+        line_height = 22
 
-            self.display.draw_text(info, (x + 10, current_y))
-            current_y += 25
+        if character.inventory:
+            for item_name, count in character.inventory.items():
+                self.draw_text(f"• {item_name} ×{count}", x + 10, line_y, Colors.WHITE, "small")
+                line_y += line_height
+                if line_y > y + height - 20:
+                    break
+        else:
+            self.draw_text("(空)", x + 10, line_y, Colors.GRAY, "small")
 
-            if current_y > y + height - 30:
-                break
+    def should_quit(self) -> bool:
+        """检查是否应该退出"""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return True
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return True
+        return False
 
-        # 如果角色太多，显示省略号
-        if len(characters) * 25 > height - 50:
-            self.display.draw_text("...", (x + 10, current_y))
+    def close(self) -> None:
+        """关闭 UI"""
+        pygame.quit()

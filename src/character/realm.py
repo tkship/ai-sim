@@ -1,166 +1,192 @@
-"""境界系统模块
-
-定义修仙者的境界等级和提升规则
+"""
+境界系统模块
 """
 from dataclasses import dataclass
+from typing import Optional
 from enum import Enum
-from typing import Tuple, List
-import random
 
 
-class MajorRealm(str, Enum):
-    """大境界枚举"""
-    LIANQI = "炼气"
-    ZHUJI = "筑基"
-    JINDAN = "金丹"
-    YUANYING = "元婴"
-    HUASHEN = "化神"
+class MajorRealm(Enum):
+    """大境界"""
+    QI_REFINING = "qi_refining"
+    FOUNDATION = "foundation"
+    GOLDEN_CORE = "golden_core"
+    NASCENT_SOUL = "nascent_soul"
+    SPIRIT_SEVERANCE = "spirit_severance"
+
+    @property
+    def display_name(self) -> str:
+        """显示名称"""
+        names = {
+            self.QI_REFINING: "炼气",
+            self.FOUNDATION: "筑基",
+            self.GOLDEN_CORE: "结丹",
+            self.NASCENT_SOUL: "元婴",
+            self.SPIRIT_SEVERANCE: "化神",
+        }
+        return names[self]
+
+    @property
+    def order(self) -> int:
+        """境界顺序"""
+        orders = {
+            self.QI_REFINING: 1,
+            self.FOUNDATION: 2,
+            self.GOLDEN_CORE: 3,
+            self.NASCENT_SOUL: 4,
+            self.SPIRIT_SEVERANCE: 5,
+        }
+        return orders[self]
+
+    @property
+    def abilities(self) -> tuple[str, ...]:
+        """解锁的特殊能力"""
+        abilities_map = {
+            self.QI_REFINING: (),
+            self.FOUNDATION: ("御剑飞行",),
+            self.GOLDEN_CORE: ("御剑飞行", "本命法宝"),
+            self.NASCENT_SOUL: ("御剑飞行", "本命法宝", "元婴出窍"),
+            self.SPIRIT_SEVERANCE: ("御剑飞行", "本命法宝", "元婴出窍", "神识化形", "空间跃迁"),
+        }
+        return abilities_map[self]
+
+    @property
+    def hp_multiplier(self) -> float:
+        """血量倍率"""
+        multipliers = {
+            self.QI_REFINING: 1.0,
+            self.FOUNDATION: 2.0,
+            self.GOLDEN_CORE: 6.0,
+            self.NASCENT_SOUL: 30.0,
+            self.SPIRIT_SEVERANCE: 300.0,
+        }
+        return multipliers[self]
+
+    @property
+    def mp_multiplier(self) -> float:
+        """灵力倍率"""
+        return self.hp_multiplier
+
+    def next(self) -> Optional["MajorRealm"]:
+        """下一个大境界"""
+        next_realms = {
+            self.QI_REFINING: self.FOUNDATION,
+            self.FOUNDATION: self.GOLDEN_CORE,
+            self.GOLDEN_CORE: self.NASCENT_SOUL,
+            self.NASCENT_SOUL: self.SPIRIT_SEVERANCE,
+        }
+        return next_realms.get(self)
 
 
-class MinorRealm(str, Enum):
-    """小境界枚举"""
-    EARLY = "初期"
-    MIDDLE = "中期"
-    LATE = "后期"
-    PEAK = "圆满"
+class MinorRealm(Enum):
+    """小境界"""
+    EARLY = "early"
+    MID = "mid"
+    LATE = "late"
+
+    @property
+    def display_name(self) -> str:
+        """显示名称"""
+        names = {
+            self.EARLY: "初期",
+            self.MID: "中期",
+            self.LATE: "后期",
+        }
+        return names[self]
+
+    @property
+    def order(self) -> int:
+        """小境界顺序"""
+        orders = {
+            self.EARLY: 1,
+            self.MID: 2,
+            self.LATE: 3,
+        }
+        return orders[self]
+
+    def next(self) -> Optional["MinorRealm"]:
+        """下一个小境界"""
+        next_realms = {
+            self.EARLY: self.MID,
+            self.MID: self.LATE,
+        }
+        return next_realms.get(self)
 
 
-# 境界提升概率配置（随机数 0-100）
-REALM_ADVANCE_CHANCE = {
-    (MajorRealm.LIANQI, MinorRealm.EARLY): 30,
-    (MajorRealm.LIANQI, MinorRealm.MIDDLE): 25,
-    (MajorRealm.LIANQI, MinorRealm.LATE): 20,
-    (MajorRealm.LIANQI, MinorRealm.PEAK): 15,  # 飞升到筑基
-
-    (MajorRealm.ZHUJI, MinorRealm.EARLY): 20,
-    (MajorRealm.ZHUJI, MinorRealm.MIDDLE): 15,
-    (MajorRealm.ZHUJI, MinorRealm.LATE): 10,
-    (MajorRealm.ZHUJI, MinorRealm.PEAK): 8,  # 飞升到金丹
-
-    (MajorRealm.JINDAN, MinorRealm.EARLY): 15,
-    (MajorRealm.JINDAN, MinorRealm.MIDDLE): 12,
-    (MajorRealm.JINDAN, MinorRealm.LATE): 8,
-    (MajorRealm.JINDAN, MinorRealm.PEAK): 5,  # 飞升到元婴
-
-    (MajorRealm.YUANYING, MinorRealm.EARLY): 10,
-    (MajorRealm.YUANYING, MinorRealm.MIDDLE): 8,
-    (MajorRealm.YUANYING, MinorRealm.LATE): 5,
-    (MajorRealm.YUANYING, MinorRealm.PEAK): 3,  # 飞升到化神
-
-    (MajorRealm.HUASHEN, MinorRealm.EARLY): 5,
-    (MajorRealm.HUASHEN, MinorRealm.MIDDLE): 3,
-    (MajorRealm.HUASHEN, MinorRealm.LATE): 2,
-    (MajorRealm.HUASHEN, MinorRealm.PEAK): 0,  # 已达最高
-}
-
-
-# 境界战斗力加成
-REALM_POWER_BONUS = {
-    (MajorRealm.LIANQI, MinorRealm.EARLY): 1.0,
-    (MajorRealm.LIANQI, MinorRealm.MIDDLE): 1.2,
-    (MajorRealm.LIANQI, MinorRealm.LATE): 1.5,
-    (MajorRealm.LIANQI, MinorRealm.PEAK): 1.8,
-
-    (MajorRealm.ZHUJI, MinorRealm.EARLY): 2.0,
-    (MajorRealm.ZHUJI, MinorRealm.MIDDLE): 2.5,
-    (MajorRealm.ZHUJI, MinorRealm.LATE): 3.0,
-    (MajorRealm.ZHUJI, MinorRealm.PEAK): 3.5,
-
-    (MajorRealm.JINDAN, MinorRealm.EARLY): 4.0,
-    (MajorRealm.JINDAN, MinorRealm.MIDDLE): 5.0,
-    (MajorRealm.JINDAN, MinorRealm.LATE): 6.0,
-    (MajorRealm.JINDAN, MinorRealm.PEAK): 7.0,
-
-    (MajorRealm.YUANYING, MinorRealm.EARLY): 8.0,
-    (MajorRealm.YUANYING, MinorRealm.MIDDLE): 10.0,
-    (MajorRealm.YUANYING, MinorRealm.LATE): 12.0,
-    (MajorRealm.YUANYING, MinorRealm.PEAK): 14.0,
-
-    (MajorRealm.HUASHEN, MinorRealm.EARLY): 16.0,
-    (MajorRealm.HUASHEN, MinorRealm.MIDDLE): 20.0,
-    (MajorRealm.HUASHEN, MinorRealm.LATE): 25.0,
-    (MajorRealm.HUASHEN, MinorRealm.PEAK): 30.0,
-}
-
-
-@dataclass
+@dataclass(frozen=True)
 class Realm:
-    """境界类
-
-    管理角色的修仙境界
-    """
-    major: MajorRealm = MajorRealm.LIANQI
-    minor: MinorRealm = MinorRealm.EARLY
+    """境界（包含大境界和小境界）"""
+    major: MajorRealm
+    minor: MinorRealm
 
     @property
-    def name(self) -> str:
-        """获取完整境界名称"""
-        return f"{self.major.value}{self.minor.value}"
+    def full_name(self) -> str:
+        """完整境界名称"""
+        return f"{self.major.display_name}{self.minor.display_name}"
 
     @property
-    def level(self) -> int:
-        """获取等级数值（用于比较）"""
-        major_levels = {
-            MajorRealm.LIANQI: 0,
-            MajorRealm.ZHUJI: 10,
-            MajorRealm.JINDAN: 20,
-            MajorRealm.YUANYING: 30,
-            MajorRealm.HUASHEN: 40,
-        }
-        minor_levels = {
-            MinorRealm.EARLY: 1,
-            MinorRealm.MIDDLE: 2,
-            MinorRealm.LATE: 3,
-            MinorRealm.PEAK: 4,
-        }
-        return major_levels[self.major] + minor_levels[self.minor]
+    def total_order(self) -> tuple[int, int]:
+        """总排序（大境界，小境界）"""
+        return (self.major.order, self.minor.order)
+
+    def __lt__(self, other: "Realm") -> bool:
+        return self.total_order < other.total_order
+
+    def __le__(self, other: "Realm") -> bool:
+        return self.total_order <= other.total_order
+
+    def __gt__(self, other: "Realm") -> bool:
+        return self.total_order > other.total_order
+
+    def __ge__(self, other: "Realm") -> bool:
+        return self.total_order >= other.total_order
+
+    def can_progress_minor(self) -> bool:
+        """是否可以提升小境界"""
+        return self.minor.next() is not None
+
+    def can_progress_major(self) -> bool:
+        """是否可以提升大境界"""
+        return self.minor == MinorRealm.LATE and self.major.next() is not None
+
+    def with_minor_progress(self) -> "Realm":
+        """提升小境界"""
+        next_minor = self.minor.next()
+        if next_minor:
+            return Realm(self.major, next_minor)
+        return self
+
+    def with_major_progress(self) -> "Realm":
+        """提升大境界（重置小境界为初期）"""
+        next_major = self.major.next()
+        if next_major:
+            return Realm(next_major, MinorRealm.EARLY)
+        return self
 
     @property
-    def power_bonus(self) -> float:
-        """获取境界战斗力加成"""
-        return REALM_POWER_BONUS.get((self.major, self.minor), 1.0)
+    def abilities(self) -> tuple[str, ...]:
+        """解锁的特殊能力"""
+        return self.major.abilities
 
-    def try_advance(self) -> bool:
-        """尝试境界提升
+    @property
+    def hp_multiplier(self) -> float:
+        """血量倍率"""
+        return self.major.hp_multiplier
 
-        Returns:
-            是否提升成功
-        """
-        chance = REALM_ADVANCE_CHANCE.get((self.major, self.minor), 0)
-        if random.randint(1, 100) <= chance:
-            self._advance()
-            return True
-        return False
+    @property
+    def mp_multiplier(self) -> float:
+        """灵力倍率"""
+        return self.major.mp_multiplier
 
-    def _advance(self) -> None:
-        """执行境界提升"""
-        minor_order = [MinorRealm.EARLY, MinorRealm.MIDDLE, MinorRealm.LATE, MinorRealm.PEAK]
-        major_order = [MajorRealm.LIANQI, MajorRealm.ZHUJI, MajorRealm.JINDAN, MajorRealm.YUANYING, MajorRealm.HUASHEN]
+    def meets_requirement(self, required: str) -> bool:
+        """检查是否满足境界要求"""
+        # 简单实现：检查境界名称是否包含要求的境界
+        return required in self.full_name
 
-        # 先尝试小境界提升
-        current_minor_index = minor_order.index(self.minor)
-        if current_minor_index < len(minor_order) - 1:
-            self.minor = minor_order[current_minor_index + 1]
-        else:
-            # 小境界圆满，尝试大境界提升
-            current_major_index = major_order.index(self.major)
-            if current_major_index < len(major_order) - 1:
-                self.major = major_order[current_major_index + 1]
-                self.minor = MinorRealm.EARLY
-
-    def to_dict(self) -> dict:
-        """转换为字典"""
-        return {
-            "major": self.major.value,
-            "minor": self.minor.value,
-            "name": self.name,
-            "level": self.level,
-            "power_bonus": self.power_bonus,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "Realm":
-        """从字典创建境界对象"""
-        major = MajorRealm(data.get("major", "炼气"))
-        minor = MinorRealm(data.get("minor", "初期"))
-        return cls(major=major, minor=minor)
+    @staticmethod
+    def create(major: str = "qi_refining", minor: str = "early") -> "Realm":
+        """创建境界对象"""
+        return Realm(
+            MajorRealm(major),
+            MinorRealm(minor)
+        )

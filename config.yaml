@@ -1,62 +1,122 @@
-# 修仙 AI 模拟游戏配置
+# 修仙游戏配置文件
 
-# AI API 配置
-ai:
-  # API 地址
-  url: "https://api.example.com/v1/chat"
-  # API Key（可选）
-  api_key: ""
-  # 请求格式：openai, anthropic, generic
-  format: "openai"
-  # 模型名称
-  model: "gpt-3.5-turbo"
-  # 请求超时（秒）
-  timeout: 30
-
-# 游戏世界观
+# 世界配置
 world:
-  name: "灵虚大陆"
-  description: |
-    这是一个修仙者的世界。灵气充盈，修仙者追求长生大道。
-    境界分为炼气、筑基、金丹、元婴、化神等层次。
-    修仙者之间既有合作也有争斗，抢夺资源、争夺机缘是常有之事。
-  # 地图大小（宽 x 高）
-  map_size: [1000, 1000]
+  name: "修仙世界"
+  start_year: 3842
+  start_month: 3
+  start_day: 7
+  cycles_per_day: 12
 
-# 初始角色配置
-characters:
-  # 初始血量范围
-  health_range: [100, 200]
-  # 初始灵力范围
-  spirit_power_range: [50, 100]
-  # 初始神识范围
-  consciousness_range: [10, 50]
-  # 初始境界
-  default_realm:
-    major: "炼气"
-    minor: "初期"
+# 境界配置
+realms:
+  # 大境界配置
+  major:
+    qi_refining:
+      name: "炼气"
+      order: 1
+      hp_multiplier: 1.0
+      mp_multiplier: 1.0
+      abilities: []
+    foundation:
+      name: "筑基"
+      order: 2
+      hp_multiplier: 2.0
+      mp_multiplier: 2.0
+      abilities: ["御剑飞行"]
+    golden_core:
+      name: "结丹"
+      order: 3
+      hp_multiplier: 6.0
+      mp_multiplier: 6.0
+      abilities: ["御剑飞行", "本命法宝"]
+    nascent_soul:
+      name: "元婴"
+      order: 4
+      hp_multiplier: 30.0
+      mp_multiplier: 30.0
+      abilities: ["御剑飞行", "本命法宝", "元婴出窍"]
+    spirit_severance:
+      name: "化神"
+      order: 5
+      hp_multiplier: 300.0
+      mp_multiplier: 300.0
+      abilities: ["御剑飞行", "本命法宝", "元婴出窍", "神识化形", "空间跃迁"]
 
-# 物品配置
-items:
-  # 初始物品列表
-  start_items: ["基础飞剑", "回灵丹", "炼气决"]
+  # 小境界突破基础成功率 (%)
+  minor_breakthrough_rates:
+    qi_refining:
+      early_to_mid: 50
+      mid_to_late: 30
+    foundation:
+      early_to_mid: 25
+      mid_to_late: 20
+    golden_core:
+      early_to_mid: 15
+      mid_to_late: 10
+    nascent_soul:
+      early_to_mid: 5
+      mid_to_late: 1
+    spirit_severance:
+      early_to_mid: 1
+      mid_to_late: 1
 
-# 游戏循环配置
-game:
-  # 每轮时间间隔（毫秒）
-  round_interval: 1000
-  # 是否自动开始
-  auto_start: true
+  # 大境界突破基础成功率 (%)
+  major_breakthrough_rates:
+    qi_to_foundation: 20
+    foundation_to_golden: 10
+    golden_to_nascent: 2
+    nascent_to_spirit: 1
 
-# 界面配置
-ui:
-  # 窗口大小
-  window_size: [1200, 800]
-  # 字体大小
-  font_size: 16
-  # 颜色配置
-  colors:
-    background: "#2c3e50"
-    text: "#ecf0f1"
-    panel: "#34495e"
-    border: "#7f8c8d"
+  # 突破尝试周期（每 N 个循环尝试一次）
+  breakthrough_cycles: 10
+
+  # 战斗感悟加成（每次战斗后增加突破概率 %）
+  combat_insight_bonus: 2.0
+
+# 角色基础属性
+character:
+  base_hp: 50
+  base_mp: 30
+  base_spirit: 20
+
+  # 灵根修炼速度加成
+  spirit_root_bonuses:
+    chaos: 2.0
+    single: 1.5
+    dual: 1.2
+    triple: 1.0
+    quadruple: 0.8
+    five: 0.6
+
+# 战斗配置
+combat:
+  # 灵力注入加成比例（每点灵力增加的伤害/防御比例）
+  spirit_power_bonus_ratio: 0.05
+
+  # 环境属性加成/减成比例
+  environment_bonus_ratio: 0.2
+  environment_penalty_ratio: 0.2
+
+# AI 配置
+ai:
+  # API 配置
+  api_url: ""
+  api_key: ""
+  model: ""
+
+  # 重试配置
+  max_retries: 3
+  retry_delay: 1.0
+
+  # 提示词配置
+  max_memory_items: 10
+  max_recent_memories: 5
+
+# 探测配置
+detection:
+  # 神识到探测范围的转换比例
+  spirit_to_range_ratio: 1.0
+
+  # 探测力加成
+  detection_bonus_ratio: 0.1

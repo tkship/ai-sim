@@ -1,256 +1,237 @@
-"""AI 接口模块
-
-提供通用的 AI API 调用接口，支持多种格式
 """
-import httpx
-from typing import Dict, List, Optional, Any
-import json
+AI 接口和属性变化应用模块
+"""
+from typing import Optional, Any
+from .parser import AIResponse, ResponseParser
+from .prompt import PromptBuilder
+from ..character import Character
 
 
 class AIInterface:
-    """AI 接口类
+    """AI 接口"""
 
-    支持调用多种格式的 AI API
-    """
-
-    def __init__(
-        self,
-        url: str = "https://api.example.com/v1/chat",
-        api_key: str = "",
-        format_type: str = "openai",
-        model: str = "gpt-3.5-turbo",
-        timeout: int = 30,
-    ):
-        """初始化 AI 接口
-
-        Args:
-            url: API 地址
-            api_key: API Key
-            format_type: 请求格式（openai, anthropic, generic）
-            model: 模型名称
-            timeout: 请求超时（秒）
-        """
-        self.url = url
+    def __init__(self, api_url: str = "", api_key: str = "", model: str = ""):
+        self.api_url = api_url
         self.api_key = api_key
-        self.format_type = format_type
         self.model = model
-        self.timeout = timeout
 
-        self.client = httpx.Client(timeout=timeout)
-
-    def _build_openai_request(self, messages: List[Dict[str, str]], **kwargs) -> Dict:
-        """构建 OpenAI 格式的请求
-
-        Args:
-            messages: 消息列表
-            **kwargs: 其他参数
-
-        Returns:
-            请求数据
-        """
-        return {
-            "model": kwargs.get("model", self.model),
-            "messages": messages,
-            "temperature": kwargs.get("temperature", 0.7),
-            "max_tokens": kwargs.get("max_tokens", 1000),
-        }
-
-    def _build_anthropic_request(self, messages: List[Dict[str, str]], **kwargs) -> Dict:
-        """构建 Anthropic 格式的请求
-
-        Args:
-            messages: 消息列表
-            **kwargs: 其他参数
-
-        Returns:
-            请求数据
-        """
-        # 将消息转换为 Anthropic 格式
-        system_message = ""
-        user_messages = []
-
-        for msg in messages:
-            if msg["role"] == "system":
-                system_message = msg["content"]
-            elif msg["role"] == "user":
-                user_messages.append({"role": "user", "content": msg["content"]})
-            elif msg["role"] == "assistant":
-                user_messages.append({"role": "assistant", "content": msg["content"]})
-
-        return {
-            "model": kwargs.get("model", self.model),
-            "system": system_message,
-            "messages": user_messages,
-            "max_tokens": kwargs.get("max_tokens", 1000),
-        }
-
-    def _build_generic_request(self, messages: List[Dict[str, str]], **kwargs) -> Dict:
-        """构建通用 JSON 格式的请求
-
-        Args:
-            messages: 消息列表
-            **kwargs: 其他参数
-
-        Returns:
-            请求数据
-        """
-        # 简单地将消息合并为 prompt
-        prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
-
-        return {
-            "prompt": prompt,
-            "model": kwargs.get("model", self.model),
-            **kwargs,
-        }
-
-    def _extract_openai_response(self, response_data: Dict) -> str:
-        """提取 OpenAI 格式的响应
-
-        Args:
-            response_data: 响应数据
-
-        Returns:
-            响应文本
-        """
-        return response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-    def _extract_anthropic_response(self, response_data: Dict) -> str:
-        """提取 Anthropic 格式的响应
-
-        Args:
-            response_data: 响应数据
-
-        Returns:
-            响应文本
-        """
-        return response_data.get("content", [{}])[0].get("text", "")
-
-    def _extract_generic_response(self, response_data: Dict) -> str:
-        """提取通用格式的响应
-
-        Args:
-            response_data: 响应数据
-
-        Returns:
-            响应文本
-        """
-        # 尝试常见的响应字段
-        if "response" in response_data:
-            return response_data["response"]
-        elif "text" in response_data:
-            return response_data["text"]
-        elif "output" in response_data:
-            return response_data["output"]
-        elif "completion" in response_data:
-            return response_data["completion"]
-        elif "result" in response_data:
-            return response_data["result"]
-        else:
-            # 返回整个 JSON 字符串
-            return json.dumps(response_data, ensure_ascii=False)
-
-    def chat(
+    async def request_decision(
         self,
-        messages: List[Dict[str, str]],
-        **kwargs
-    ) -> str:
-        """发送聊天请求
+        prompt: str
+    ) -> Optional[AIResponse]:
+        """
+        请求 AI 决策（模拟版，实际项目中应该调用真实 API）
 
         Args:
-            messages: 消息列表，格式为 [{"role": "user", "content": "..."}]
-            **kwargs: 其他参数
+            prompt: 提示词
 
         Returns:
-            AI 的响应文本
-
-        Raises:
-            httpx.HTTPError: 请求失败
-            ValueError: 响应格式错误
+            AI 响应或 None
         """
-        # 构建请求
-        if self.format_type == "openai":
-            request_data = self._build_openai_request(messages, **kwargs)
-        elif self.format_type == "anthropic":
-            request_data = self._build_anthropic_request(messages, **kwargs)
-        else:  # generic
-            request_data = self._build_generic_request(messages, **kwargs)
-
-        # 构建请求头
-        headers = {
-            "Content-Type": "application/json",
+        # 这是模拟实现，实际项目中应该调用真实的 LLM API
+        # 这里返回一个简单的示例响应
+        import json
+        mock_response = {
+            "交互概述": "角色选择继续修炼",
+            "场景描述": "角色闭目打坐，运转功法修炼...",
+            "属性变化": {
+                "char_001": {
+                    "灵力": 5,
+                    "状态": {
+                        "新增": [],
+                        "移除": []
+                    },
+                    "法宝变化": [],
+                    "物品变化": {
+                        "获得": {},
+                        "失去": {}
+                    }
+                }
+            }
         }
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        # 发送请求
-        try:
-            response = self.client.post(
-                self.url,
-                json=request_data,
-                headers=headers,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as e:
-            raise
-
-        # 解析响应
-        response_data = response.json()
-
-        # 提取响应文本
-        if self.format_type == "openai":
-            return self._extract_openai_response(response_data)
-        elif self.format_type == "anthropic":
-            return self._extract_anthropic_response(response_data)
-        else:  # generic
-            return self._extract_generic_response(response_data)
-
-    def close(self) -> None:
-        """关闭 HTTP 客户端"""
-        self.client.close()
-
-    def __enter__(self):
-        """支持上下文管理器"""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """支持上下文管理器"""
-        self.close()
+        json_str = json.dumps(mock_response, ensure_ascii=False)
+        return ResponseParser.parse(json_str)
 
 
-class MockAIInterface(AIInterface):
-    """Mock AI 接口
+class ChangeApplier:
+    """属性变化应用器"""
 
-    用于测试和不连接真实 AI 的情况
-    """
-
-    def __init__(self):
-        """初始化 Mock 接口"""
-        super().__init__(url="", format_type="mock")
-
-    def chat(
-        self,
-        messages: List[Dict[str, str]],
-        **kwargs
-    ) -> str:
-        """返回预设的模拟响应
+    @staticmethod
+    def apply_to_character(
+        character: Character,
+        response: AIResponse
+    ) -> tuple[Character, list[str]]:
+        """
+        将 AI 响应中的变化应用到角色
 
         Args:
-            messages: 消息列表
-            **kwargs: 其他参数
+            character: 原始角色
+            response: AI 响应
 
         Returns:
-            模拟的响应
+            (新角色对象, 变化日志列表)
         """
-        # 返回一个模拟的 JSON 响应
-        return json.dumps({
-            "action_thought": "决定打坐修炼，恢复灵力",
-            "scene_description": "灵气充盈，周围的草木在风中轻轻摇曳",
-            "attribute_deltas": {
-                "health": 0,
-                "spirit_power": 5,
-            },
-            "item_changes": {
-                "obtained": [],
-                "lost": [],
-            },
-        }, ensure_ascii=False)
+        logs = []
+        new_char = character
+
+        # 查找该角色的变化
+        char_change = None
+        for cid, change in response.character_changes.items():
+            if cid == character.id or cid == character.name:
+                char_change = change
+                break
+
+        if not char_change:
+            return new_char, logs
+
+        # 应用属性变化
+        attr = char_change.attributes
+        if attr.hp_delta != 0:
+            new_attr = new_char.attributes.with_hp_delta(attr.hp_delta)
+            new_char = new_char.with_attributes(new_attr)
+            logs.append(f"血量变化: {attr.hp_delta:+d}")
+
+        if attr.mp_delta != 0:
+            new_attr = new_char.attributes.with_mp_delta(attr.mp_delta)
+            new_char = new_char.with_attributes(new_attr)
+            logs.append(f"灵力变化: {attr.mp_delta:+d}")
+
+        if attr.spirit_delta != 0:
+            new_attr = new_char.attributes.with_spirit_delta(attr.spirit_delta)
+            new_char = new_char.with_attributes(new_attr)
+            logs.append(f"神识变化: {attr.spirit_delta:+d}")
+
+        # 应用状态变化
+        for status in attr.status_add:
+            new_attr = new_char.attributes.add_status(status)
+            new_char = new_char.with_attributes(new_attr)
+            logs.append(f"添加状态: {status}")
+
+        for status in attr.status_remove:
+            new_attr = new_char.attributes.remove_status(status)
+            new_char = new_char.with_attributes(new_attr)
+            logs.append(f"移除状态: {status}")
+
+        # 应用物品变化
+        item_change = char_change.item_changes
+        for item_name, count in item_change.items_gained.items():
+            new_char = new_char.add_item(item_name, count)
+            logs.append(f"获得物品: {item_name} ×{count}")
+
+        for item_name, count in item_change.items_lost.items():
+            new_char = new_char.remove_item(item_name, count)
+            logs.append(f"失去物品: {item_name} ×{count}")
+
+        return new_char, logs
+
+    @staticmethod
+    def apply_to_characters(
+        characters: list[Character],
+        response: AIResponse
+    ) -> tuple[list[Character], dict[str, list[str]]]:
+        """
+        将变化应用到多个角色
+
+        Args:
+            characters: 原始角色列表
+            response: AI 响应
+
+        Returns:
+            (新角色列表, {角色ID: 变化日志列表})
+        """
+        new_characters = []
+        all_logs = {}
+
+        for char in characters:
+            new_char, logs = ChangeApplier.apply_to_character(char, response)
+            new_characters.append(new_char)
+            if logs:
+                all_logs[char.id] = logs
+
+        return new_characters, all_logs
+
+
+class AICoordinator:
+    """AI 协调器 - 整合提示词构建、AI 请求、响应解析、变化应用"""
+
+    def __init__(self, ai_interface: AIInterface, prompt_builder: PromptBuilder):
+        self.ai_interface = ai_interface
+        self.prompt_builder = prompt_builder
+
+    async def process_single_character(
+        self,
+        character: Character,
+        environment: dict[str, Any],
+        treasures_data: dict[str, Any],
+        techniques_data: dict[str, Any]
+    ) -> tuple[Character, AIResponse, list[str]]:
+        """
+        处理单个角色的决策流程
+
+        Args:
+            character: 角色
+            environment: 环境信息
+            treasures_data: 法宝数据
+            techniques_data: 功法数据
+
+        Returns:
+            (新角色, AI响应, 变化日志)
+        """
+        # 构建提示词
+        prompt = self.prompt_builder.build_single_character_prompt(
+            character, environment, treasures_data, techniques_data
+        )
+
+        # 请求 AI 决策
+        response = await self.ai_interface.request_decision(prompt)
+        if not response:
+            return character, None, []
+
+        # 验证响应
+        is_valid, errors = ResponseParser.validate(response)
+        if not is_valid:
+            return character, response, errors
+
+        # 应用变化
+        new_char, logs = ChangeApplier.apply_to_character(character, response)
+
+        return new_char, response, logs
+
+    async def process_interaction_group(
+        self,
+        characters: list[Character],
+        environment: dict[str, Any],
+        treasures_data: dict[str, Any],
+        techniques_data: dict[str, Any]
+    ) -> tuple[list[Character], AIResponse, dict[str, list[str]]]:
+        """
+        处理交互组的决策流程
+
+        Args:
+            characters: 角色列表
+            environment: 环境信息
+            treasures_data: 法宝数据
+            techniques_data: 功法数据
+
+        Returns:
+            (新角色列表, AI响应, {角色ID: 变化日志})
+        """
+        # 构建提示词
+        prompt = self.prompt_builder.build_multi_character_prompt(
+            characters, environment, treasures_data, techniques_data
+        )
+
+        # 请求 AI 决策
+        response = await self.ai_interface.request_decision(prompt)
+        if not response:
+            return characters, None, {}
+
+        # 验证响应
+        is_valid, errors = ResponseParser.validate(response)
+        if not is_valid:
+            return characters, response, {err: [] for err in errors}
+
+        # 应用变化
+        new_chars, logs = ChangeApplier.apply_to_characters(characters, response)
+
+        return new_chars, response, logs
