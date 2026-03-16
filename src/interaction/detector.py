@@ -30,9 +30,7 @@ class DetectionSystem:
         Returns:
             探测范围
         """
-        base_range = 10.0
-        spirit_bonus = character.attributes.spirit.current * 0.5
-        return base_range + spirit_bonus
+        return character.detection_range
 
     @staticmethod
     def detect_characters(

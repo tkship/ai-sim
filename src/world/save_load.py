@@ -85,9 +85,16 @@ class SaveManager:
             ))
 
     def _save_characters(self, characters: dict[str, dict[str, Any]]) -> None:
-        """保存角色数据（简化版，实际应该有单独的角色表）"""
-        # 这里只是示例，实际项目中应该有更完善的角色表设计
-        pass
+        """保存角色数据到数据库"""
+        self.db.execute("DELETE FROM character_states")
+        for character_id, payload in characters.items():
+            self.db.execute(
+                """
+                INSERT INTO character_states (character_id, payload, saved_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                """,
+                (character_id, json.dumps(payload, ensure_ascii=False)),
+            )
 
     def _save_to_json(self, state: GameState, slot: int) -> None:
         """保存到 JSON 文件"""
@@ -160,6 +167,12 @@ class SaveManager:
         state.current_month = row.get("current_month", 3)
         state.current_day = row.get("current_day", 7)
         state.cycle_count = row.get("cycle_count", 0)
+        character_rows = self.db.fetch_all("SELECT character_id, payload FROM character_states")
+        for item in character_rows:
+            try:
+                state.characters[item["character_id"]] = json.loads(item["payload"])
+            except Exception:
+                continue
 
         return state
 

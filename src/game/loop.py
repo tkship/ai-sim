@@ -4,7 +4,7 @@
 import asyncio
 from typing import Optional, Dict, Any, List
 from .world import World
-from ..world import Config, Database, KeywordRetriever
+from ..world import Config, Database, KeywordRetriever, SaveManager, GameState
 from ..character import Character
 from ..ai import AIInterface, AICoordinator, PromptBuilder
 from ..interaction import InteractionDetector
@@ -20,6 +20,7 @@ class GameLoop:
         self.db = Database()
         self.world = World(config)
         self.retriever = KeywordRetriever(self.db)
+        self.save_manager = SaveManager(self.db, config)
 
         # 系统初始化
         self.ai_interface = AIInterface()
@@ -89,6 +90,13 @@ class GameLoop:
         treasures_data = {t["name"]: t for t in item_data.get("treasures", [])}
         techniques_data = {t["name"]: t for t in item_data.get("techniques", [])}
 
+        # 将法宝模板信息同步到角色动态法宝状态（探测加成/耐久等）
+        for char in all_chars:
+            synced_char = char.sync_treasure_templates(treasures_data)
+            synced_char = synced_char.sync_technique_templates(techniques_data)
+            self.world.update_character(synced_char)
+        all_chars = self.world.get_all_characters()
+
         env = self.world.get_environment_dict()
 
         # 3. 处理交互组
@@ -117,7 +125,7 @@ class GameLoop:
                 self.world.update_character(new_char)
 
         # 5. 检查境界突破
-        if self.breakthrough_system.should_attempt_breakthrough(self.world.time.cycle):
+        if self.breakthrough_system.should_attempt_breakthrough(self.world.time.total_cycles):
             for char in self.world.get_all_characters():
                 if char.realm.can_progress_minor():
                     new_char, result = self.breakthrough_system.try_minor_breakthrough(char)
@@ -161,13 +169,41 @@ class GameLoop:
         self.ui.present()
 
     def save_game(self, slot: int = 1) -> bool:
-        """保存游戏（简化版）"""
-        # 暂时简化实现
-        self.world.add_scene_log(f"存档功能开发中...")
-        return True
+        """保存游戏"""
+        state = GameState()
+        state.current_year = self.world.time.year
+        state.current_month = self.world.time.month
+        state.current_day = self.world.time.day
+        state.cycle_count = self.world.time.total_cycles
+        state.characters = {
+            char.id: char.to_save_dict()
+            for char in self.world.get_all_characters()
+        }
+
+        success = self.save_manager.save_game(state, slot)
+        if success:
+            self.world.add_scene_log(f"已保存到存档位 {slot}")
+        else:
+            self.world.add_scene_log(f"存档失败（槽位 {slot}）")
+        return success
 
     def load_game(self, slot: int = 1) -> bool:
-        """加载游戏（简化版）"""
-        # 暂时简化实现
-        self.world.add_scene_log(f"读档功能开发中...")
-        return False
+        """加载游戏"""
+        state = self.save_manager.load_game(slot)
+        if not state:
+            self.world.add_scene_log(f"读取存档失败（槽位 {slot}）")
+            return False
+
+        self.world.time.year = state.current_year
+        self.world.time.month = state.current_month
+        self.world.time.day = state.current_day
+        self.world.time.total_cycles = state.cycle_count
+        self.world.time.cycle = state.cycle_count % self.config.world.get("cycles_per_day", 12)
+
+        self.world.characters = {}
+        for payload in state.characters.values():
+            char = Character.from_save_dict(payload)
+            self.world.add_character(char)
+
+        self.world.add_scene_log(f"已加载存档位 {slot}")
+        return True

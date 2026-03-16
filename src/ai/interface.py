@@ -122,6 +122,21 @@ class ChangeApplier:
             new_char = new_char.remove_item(item_name, count)
             logs.append(f"失去物品: {item_name} ×{count}")
 
+        # 应用法宝变化
+        for treasure_change in char_change.treasure_changes:
+            if not treasure_change.treasure_name:
+                continue
+            new_char = new_char.apply_treasure_change(
+                treasure_name=treasure_change.treasure_name,
+                wear_delta=treasure_change.wear_delta,
+                durability_delta=treasure_change.durability_delta,
+                injected_spirit=treasure_change.injected_spirit,
+            )
+            logs.append(
+                f"法宝变化: {treasure_change.treasure_name} "
+                f"(损耗{treasure_change.wear_delta:+d}, 耐久{treasure_change.durability_delta:+d})"
+            )
+
         return new_char, logs
 
     @staticmethod

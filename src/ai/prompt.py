@@ -62,10 +62,15 @@ class PromptBuilder:
             for slot, treasure_name in character.equipment.items():
                 treasure_data = treasures_data.get(treasure_name)
                 if treasure_data:
+                    treasure_state = character.treasure_states.get(treasure_name, {})
                     lines.append(f"{slot}: {treasure_name}")
                     lines.append(f"   - 基础攻击：{treasure_data.get('attack_min', 0)}-{treasure_data.get('attack_max', 0)}")
-                    lines.append(f"   - 当前损耗度：{treasure_data.get('wear', 100)}/100")
-                    lines.append(f"   - 当前注入灵力：{treasure_data.get('injected_spirit', 0)}/{treasure_data.get('max_injected_spirit', 20)}")
+                    lines.append(f"   - 当前损耗度：{treasure_state.get('wear', treasure_data.get('wear', 100))}/100")
+                    lines.append(
+                        "   - 当前注入灵力："
+                        f"{treasure_state.get('injected_spirit', treasure_data.get('injected_spirit', 0))}/"
+                        f"{treasure_state.get('max_injected_spirit', treasure_data.get('max_injected_spirit', 20))}"
+                    )
             lines.append("")
 
         # 物品栏

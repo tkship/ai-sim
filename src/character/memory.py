@@ -228,3 +228,61 @@ class MemoryBank:
     def get_all_goals(self) -> list[LongTermGoal]:
         """获取所有目标"""
         return list(self._goals.values())
+
+    def to_dict(self) -> dict:
+        """序列化记忆库"""
+        return {
+            "memories": [
+                {
+                    "id": m.id,
+                    "content": m.content,
+                    "importance": m.importance.value,
+                    "timestamp": m.timestamp.isoformat(),
+                    "tags": list(m.tags),
+                }
+                for m in self._memories.values()
+            ],
+            "goals": [
+                {
+                    "id": g.id,
+                    "description": g.description,
+                    "priority": g.priority,
+                    "created_at": g.created_at.isoformat(),
+                    "progress": g.progress,
+                }
+                for g in self._goals.values()
+            ],
+        }
+
+    @staticmethod
+    def from_dict(character_id: str, data: dict | None) -> "MemoryBank":
+        """从序列化数据恢复记忆库"""
+        bank = MemoryBank(character_id)
+        if not data:
+            return bank
+
+        for item in data.get("memories", []):
+            timestamp_raw = item.get("timestamp")
+            timestamp = datetime.fromisoformat(timestamp_raw) if timestamp_raw else datetime.now()
+            memory = Memory(
+                id=item.get("id", f"mem_{len(bank._memories) + 1}"),
+                content=item.get("content", ""),
+                importance=MemoryImportance(item.get("importance", MemoryImportance.NORMAL.value)),
+                timestamp=timestamp,
+                tags=tuple(item.get("tags", [])),
+            )
+            bank._memories[memory.id] = memory
+
+        for item in data.get("goals", []):
+            created_raw = item.get("created_at")
+            created_at = datetime.fromisoformat(created_raw) if created_raw else datetime.now()
+            goal = LongTermGoal(
+                id=item.get("id", f"goal_{len(bank._goals) + 1}"),
+                description=item.get("description", ""),
+                priority=item.get("priority", 5),
+                created_at=created_at,
+                progress=item.get("progress", 0.0),
+            )
+            bank._goals[goal.id] = goal
+
+        return bank

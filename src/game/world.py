@@ -14,6 +14,7 @@ class WorldTime:
     month: int = 3
     day: int = 7
     cycle: int = 0
+    total_cycles: int = 0
 
     def advance_cycle(self, cycles_per_day: int = 12) -> bool:
         """
@@ -22,6 +23,7 @@ class WorldTime:
         Returns:
             是否进入新的一天
         """
+        self.total_cycles += 1
         self.cycle += 1
         if self.cycle >= cycles_per_day:
             self.cycle = 0
@@ -120,6 +122,7 @@ class World:
             "month": self.time.month,
             "day": self.time.day,
             "cycle": self.time.cycle,
+            "total_cycles": self.time.total_cycles,
             "location": self.location,
             "scene_logs": self.scene_logs,
         }
@@ -132,6 +135,7 @@ class World:
         world.time.month = data.get("month", 3)
         world.time.day = data.get("day", 7)
         world.time.cycle = data.get("cycle", 0)
+        world.time.total_cycles = data.get("total_cycles", 0)
         world.location = data.get("location", "黑风岭")
         world.scene_logs = data.get("scene_logs", [])
         return world

@@ -91,6 +91,15 @@ class Database:
                 )
             """)
 
+            # 角色状态表（用于存档）
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS character_states (
+                    character_id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # 索引
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_treasures_name ON treasures(name)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_techniques_name ON techniques(name)")

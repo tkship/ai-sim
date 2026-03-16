@@ -120,3 +120,43 @@ detection:
 
   # 探测力加成
   detection_bonus_ratio: 0.1
+
+# 基础模板（启动时可用于初始化数据库）
+templates:
+  treasures:
+    - name: "玄金剑"
+      element: "metal"
+      type: "attack"
+      spirit_power_cost: 5
+      attack_min: 15
+      attack_max: 25
+      special_effects: ["对木系敌人伤害+30%"]
+      description: "精金打造的长剑"
+    - name: "玄铁盾"
+      element: "earth"
+      type: "defense"
+      spirit_power_cost: 3
+      defense_min: 10
+      defense_max: 15
+      special_effects: []
+      description: "厚重的铁盾"
+    - name: "聚灵佩"
+      element: null
+      type: "support"
+      mp_bonus: 20
+      special_effects: ["灵力恢复速度+10%"]
+      description: "辅助修炼的玉佩"
+  techniques:
+    - name: "烈阳诀"
+      element: "fire"
+      max_level: 10
+      cultivation_speed_bonus: 0.15
+      attack_bonus: 0.1
+      skills: ["烈阳一击"]
+      description: "火系功法，修炼速度+15%"
+    - name: "金锋剑诀"
+      element: "metal"
+      max_level: 10
+      attack_bonus: 0.2
+      skills: ["金锋斩"]
+      description: "金系剑法，剑类法宝伤害+20%"

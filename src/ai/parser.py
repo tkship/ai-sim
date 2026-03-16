@@ -109,7 +109,7 @@ class ResponseParser:
                         treasure_name=t_data.get("法宝名称", t_data.get("name", "")),
                         wear_delta=t_data.get("损耗度变化", t_data.get("wear_delta", 0)),
                         durability_delta=t_data.get("耐久度变化", t_data.get("durability_delta", 0)),
-                        injected_spirit=t_data.get("当前注入灵力"),
+                        injected_spirit=t_data.get("当前注入灵力", t_data.get("injected_spirit")),
                         description=t_data.get("说明", "")
                     )
                     char_change.treasure_changes.append(t_change)
