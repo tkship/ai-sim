@@ -130,7 +130,7 @@ def create_sample_characters(game: GameLoop) -> None:
     )
 
     char2.memory_bank.add_memory("刚经历一场战斗，灵力消耗不少", importance=3)
-    char2.memory_bank.add_memory("需要找个地方疗伤", importance=5)
+    char2.memory_bank.add_memory("需要找个地方疗伤", importance=4)
 
     char2.memory_bank.add_goal("找到安全的地方疗伤", priority=10)
 

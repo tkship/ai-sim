@@ -25,7 +25,6 @@ class Memory:
     timestamp: datetime = field(default_factory=datetime.now)
     tags: tuple[str, ...] = ()
 
-    @property
     def is_recent(self, hours: int = 24) -> bool:
         """是否是近期记忆"""
         delta = datetime.now() - self.timestamp
@@ -76,7 +75,7 @@ class MemoryBank:
     def add_memory(
         self,
         content: str,
-        importance: MemoryImportance = MemoryImportance.NORMAL,
+        importance: MemoryImportance | int = MemoryImportance.NORMAL,
         tags: Optional[list[str]] = None,
         memory_id: Optional[str] = None
     ) -> str:
@@ -85,7 +84,7 @@ class MemoryBank:
 
         Args:
             content: 记忆内容
-            importance: 重要度
+            importance: 重要度（MemoryImportance 枚举或整数 0-4）
             tags: 标签列表
             memory_id: 记忆ID（自动生成如果未提供）
 
@@ -94,6 +93,10 @@ class MemoryBank:
         """
         if memory_id is None:
             memory_id = f"mem_{len(self._memories) + 1}"
+
+        # 如果传入的是整数，转换为枚举
+        if isinstance(importance, int):
+            importance = MemoryImportance(importance)
 
         memory = Memory(
             id=memory_id,
