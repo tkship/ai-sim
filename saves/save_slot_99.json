@@ -1,0 +1,55 @@
+{
+  "current_year": 4000,
+  "current_month": 1,
+  "current_day": 2,
+  "cycle_count": 99,
+  "characters": {
+    "char_006": {
+      "id": "char_006",
+      "name": "顾辰",
+      "attributes": {
+        "hp": {
+          "current": 50,
+          "max": 50
+        },
+        "mp": {
+          "current": 30,
+          "max": 30
+        },
+        "spirit": {
+          "current": 20,
+          "max": 20
+        },
+        "statuses": []
+      },
+      "realm": {
+        "major": "qi_refining",
+        "minor": "early"
+      },
+      "spirit_root": {
+        "is_chaos": false,
+        "elements": [
+          "metal"
+        ]
+      },
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "techniques": {},
+      "inventory": {
+        "下品灵石": 20
+      },
+      "equipment": {},
+      "treasure_states": {},
+      "technique_modifiers": {},
+      "combat_insight": 0.0,
+      "breakthrough_bonus": 0.0,
+      "memory_bank": {
+        "memories": [],
+        "goals": []
+      }
+    }
+  },
+  "saved_at": "2026-03-16T22:11:57.633049"
+}
