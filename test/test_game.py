@@ -22,55 +22,20 @@ from src.world import (
 
 
 def initialize_sample_data(db: Database) -> None:
-    """初始化示例数据。"""
+    """校验基础配置数据是否可用。"""
     treasure_repo = TreasureRepository(db)
     technique_repo = TechniqueRepository(db)
 
-    if treasure_repo.get_all():
-        print("Sample data already exists")
-        return
+    treasures = treasure_repo.get_all()
+    techniques = technique_repo.get_all()
 
-    print("Creating sample data...")
+    if not treasures:
+        raise RuntimeError("未找到法宝配置，请检查 config/content/treasures.yaml")
+    if not techniques:
+        raise RuntimeError("未找到功法配置，请检查 config/content/techniques.yaml")
 
-    treasure_repo.create(
-        {
-            "name": "玄金剑",
-            "element": "metal",
-            "type": "attack",
-            "spirit_power_cost": 5,
-            "attack_min": 15,
-            "attack_max": 25,
-            "special_effects": ["对木系敌人伤害+30%"],
-            "description": "精金打造的长剑",
-        }
-    )
-
-    treasure_repo.create(
-        {
-            "name": "玄铁盾",
-            "element": "earth",
-            "type": "defense",
-            "spirit_power_cost": 3,
-            "defense_min": 10,
-            "defense_max": 15,
-            "special_effects": [],
-            "description": "厚重的铁盾",
-        }
-    )
-
-    technique_repo.create(
-        {
-            "name": "烈阳诀",
-            "element": "fire",
-            "max_level": 10,
-            "cultivation_speed_bonus": 0.15,
-            "attack_bonus": 0.1,
-            "skills": ["烈阳一击"],
-            "description": "火系功法，修炼速度+15%",
-        }
-    )
-
-    print("Sample data created!")
+    print(f"Loaded {len(treasures)} treasures from config")
+    print(f"Loaded {len(techniques)} techniques from config")
 
 
 def print_section(title: str) -> None:

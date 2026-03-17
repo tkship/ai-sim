@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-生成新的法宝和功法数据并添加到数据库
+生成新的法宝和功法数据并写入 YAML 配置文件
 """
 
-import json
 from src.world.database import Database
 from src.world.repository import TreasureRepository, TechniqueRepository
 
@@ -275,7 +274,7 @@ def generate_new_techniques():
 
 def main():
     """主函数"""
-    # 初始化数据库和仓库
+    # 初始化仓库（Database 参数仅为兼容保留，法宝/功法已改为 YAML 存储）
     db = Database("/home/aiuser/ai-sim/game.db")
     treasure_repo = TreasureRepository(db)
     technique_repo = TechniqueRepository(db)

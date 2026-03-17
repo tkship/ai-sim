@@ -4,7 +4,6 @@
 import asyncio
 import sys
 from pathlib import Path
-from typing import Optional
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,79 +18,15 @@ from src.character import (
 from src.game import GameLoop
 
 
-def initialize_sample_data(db: Database, config: Optional[Config] = None) -> None:
-    """初始化示例数据"""
+def initialize_sample_data(db: Database) -> None:
+    """校验基础配置数据是否可用。"""
     treasure_repo = TreasureRepository(db)
     technique_repo = TechniqueRepository(db)
 
-    # 检查是否已有数据
-    existing_treasures = treasure_repo.get_all()
-    if existing_treasures:
-        return
-
-    template_treasures = []
-    template_techniques = []
-    if config:
-        template_treasures = config.get("templates.treasures", []) or []
-        template_techniques = config.get("templates.techniques", []) or []
-
-    if not template_treasures:
-        template_treasures = [
-            {
-                "name": "玄金剑",
-                "element": "metal",
-                "type": "attack",
-                "spirit_power_cost": 5,
-                "attack_min": 15,
-                "attack_max": 25,
-                "special_effects": ["对木系敌人伤害+30%"],
-                "description": "精金打造的长剑"
-            },
-            {
-                "name": "玄铁盾",
-                "element": "earth",
-                "type": "defense",
-                "spirit_power_cost": 3,
-                "defense_min": 10,
-                "defense_max": 15,
-                "special_effects": [],
-                "description": "厚重的铁盾"
-            },
-            {
-                "name": "聚灵佩",
-                "element": None,
-                "type": "support",
-                "mp_bonus": 20,
-                "special_effects": ["灵力恢复速度+10%"],
-                "description": "辅助修炼的玉佩"
-            },
-        ]
-
-    if not template_techniques:
-        template_techniques = [
-            {
-                "name": "烈阳诀",
-                "element": "fire",
-                "max_level": 10,
-                "cultivation_speed_bonus": 0.15,
-                "attack_bonus": 0.1,
-                "skills": ["烈阳一击"],
-                "description": "火系功法，修炼速度+15%"
-            },
-            {
-                "name": "金锋剑诀",
-                "element": "metal",
-                "max_level": 10,
-                "attack_bonus": 0.2,
-                "skills": ["金锋斩"],
-                "description": "金系剑法，剑类法宝伤害+20%"
-            },
-        ]
-
-    for treasure in template_treasures:
-        treasure_repo.create(treasure)
-    for technique in template_techniques:
-        technique_repo.create(technique)
+    if not treasure_repo.get_all():
+        raise RuntimeError("未找到法宝配置，请检查 config/content/treasures.yaml")
+    if not technique_repo.get_all():
+        raise RuntimeError("未找到功法配置，请检查 config/content/techniques.yaml")
 
 
 def create_sample_characters(game: GameLoop) -> None:
@@ -177,7 +112,7 @@ async def main():
 
     # 初始化示例数据
     print("加载游戏数据...")
-    initialize_sample_data(db, config)
+    initialize_sample_data(db)
 
     # 创建游戏循环
     print("初始化游戏...")

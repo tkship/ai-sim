@@ -1,5 +1,8 @@
 """
 SQLite 数据库模块
+
+当前仅负责游戏状态、角色记忆等运行时数据。
+法宝/功法模板数据已迁移到 config/content/*.yaml。
 """
 import sqlite3
 from pathlib import Path
@@ -19,53 +22,6 @@ class Database:
         """初始化数据库表结构"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-
-            # 法宝表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS treasures (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    element TEXT,
-                    type TEXT NOT NULL,
-                    spirit_power_cost INTEGER DEFAULT 0,
-                    realm_required TEXT,
-                    durability INTEGER DEFAULT 100,
-                    max_durability INTEGER DEFAULT 100,
-                    attack_min INTEGER DEFAULT 0,
-                    attack_max INTEGER DEFAULT 0,
-                    defense_min INTEGER DEFAULT 0,
-                    defense_max INTEGER DEFAULT 0,
-                    hp_bonus INTEGER DEFAULT 0,
-                    mp_bonus INTEGER DEFAULT 0,
-                    spirit_bonus INTEGER DEFAULT 0,
-                    speed_bonus REAL DEFAULT 0,
-                    detection_bonus REAL DEFAULT 0,
-                    breakthrough_bonus REAL DEFAULT 0,
-                    special_effects TEXT,
-                    description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_template INTEGER DEFAULT 1
-                )
-            """)
-
-            # 功法表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS techniques (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    element TEXT,
-                    realm_required TEXT,
-                    max_level INTEGER DEFAULT 10,
-                    attack_bonus REAL DEFAULT 0,
-                    defense_bonus REAL DEFAULT 0,
-                    cultivation_speed_bonus REAL DEFAULT 0,
-                    breakthrough_bonus REAL DEFAULT 0,
-                    skills TEXT,
-                    description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_template INTEGER DEFAULT 1
-                )
-            """)
 
             # 角色记忆表
             cursor.execute("""
@@ -101,8 +57,6 @@ class Database:
             """)
 
             # 索引
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_treasures_name ON treasures(name)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_techniques_name ON techniques(name)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_character ON character_memories(character_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_timestamp ON character_memories(timestamp DESC)")
 
