@@ -41,6 +41,7 @@ class PromptBuilder:
         lines.append(f"- 血量：{character.attributes.hp}")
         lines.append(f"- 灵力：{character.attributes.mp}")
         lines.append(f"- 神识：{character.attributes.spirit}")
+        lines.append(f"- 坐标：({character.position.x:.1f}, {character.position.y:.1f})")
         if character.attributes.statuses:
             lines.append(f"- 状态：{', '.join(character.attributes.statuses)}")
         else:
@@ -106,10 +107,17 @@ class PromptBuilder:
             lines.append(f"【地点】{environment['location']}")
         if "time" in environment:
             lines.append(f"【时间】{environment['time']}")
+        if "map" in environment:
+            map_data = environment["map"]
+            lines.append(
+                f"【地图】{map_data.get('name', '')} "
+                f"范围 x:[{map_data.get('min_x')}, {map_data.get('max_x')}] "
+                f"y:[{map_data.get('min_y')}, {map_data.get('max_y')}]"
+            )
         if "scene_type" in environment:
             lines.append(f"【场景类型】{environment['scene_type']}")
         for key, value in environment.items():
-            if key not in ["location", "time", "scene_type"]:
+            if key not in ["location", "time", "scene_type", "map", "character_positions"]:
                 lines.append(f"- {key}：{value}")
 
         lines.append("")
@@ -153,6 +161,7 @@ class PromptBuilder:
             lines.append(f"- 血量：{character.attributes.hp}")
             lines.append(f"- 灵力：{character.attributes.mp}")
             lines.append(f"- 神识：{character.attributes.spirit}")
+            lines.append(f"- 坐标：({character.position.x:.1f}, {character.position.y:.1f})")
             if character.attributes.statuses:
                 lines.append(f"- 状态：{', '.join(character.attributes.statuses)}")
             lines.append("")
@@ -179,8 +188,15 @@ class PromptBuilder:
             lines.append(f"【地点】{environment['location']}")
         if "time" in environment:
             lines.append(f"【时间】{environment['time']}")
+        if "map" in environment:
+            map_data = environment["map"]
+            lines.append(
+                f"【地图】{map_data.get('name', '')} "
+                f"范围 x:[{map_data.get('min_x')}, {map_data.get('max_x')}] "
+                f"y:[{map_data.get('min_y')}, {map_data.get('max_y')}]"
+            )
         for key, value in environment.items():
-            if key not in ["location", "time"]:
+            if key not in ["location", "time", "map", "character_positions"]:
                 lines.append(f"- {key}：{value}")
         lines.append("")
         lines.append("=" * 90)

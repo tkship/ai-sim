@@ -4,6 +4,7 @@ UI 渲染器模块
 import pygame
 from typing import Optional, List
 from ..character import Character
+from ..world import WorldMap
 
 
 class Colors:
@@ -18,6 +19,7 @@ class Colors:
     BLUE = (0, 0, 255)
     GOLD = (255, 215, 0)
     CYAN = (0, 255, 255)
+    ORANGE = (255, 165, 0)
 
 
 class UIRenderer:
@@ -138,6 +140,13 @@ class UIRenderer:
         # 境界
         self.draw_text(f"境界: {character.realm.full_name}", x + 10, y + 40, Colors.CYAN)
         self.draw_text(f"灵根: {character.spirit_root.display_name}", x + 10, y + 65, Colors.CYAN)
+        self.draw_text(
+            f"坐标: ({character.position.x:.1f}, {character.position.y:.1f})",
+            x + 10,
+            y + 85,
+            Colors.LIGHT_GRAY,
+            "small",
+        )
 
         # 进度条
         bar_width = width - 20
@@ -145,19 +154,52 @@ class UIRenderer:
 
         # 血量
         hp_color = Colors.RED if character.attributes.hp.ratio < 0.3 else Colors.GREEN
-        self.draw_progress_bar(bar_x, y + 95, bar_width, 20,
+        self.draw_progress_bar(bar_x, y + 110, bar_width, 20,
                                 character.attributes.hp.current, character.attributes.hp.max,
                                 hp_color, "血量")
 
         # 灵力
-        self.draw_progress_bar(bar_x, y + 125, bar_width, 20,
+        self.draw_progress_bar(bar_x, y + 140, bar_width, 20,
                                 character.attributes.mp.current, character.attributes.mp.max,
                                 Colors.BLUE, "灵力")
 
         # 神识
-        self.draw_progress_bar(bar_x, y + 155, bar_width, 20,
+        self.draw_progress_bar(bar_x, y + 170, bar_width, 20,
                                 character.attributes.spirit.current, character.attributes.spirit.max,
                                 Colors.GOLD, "神识")
+
+    def draw_map(self, world_map: WorldMap, characters: List[Character], x: int, y: int, width: int, height: int) -> None:
+        """绘制地图面板和角色坐标。"""
+        if not self.screen:
+            return
+
+        self.draw_panel(x, y, width, height, f"【地图 - {world_map.name}】")
+        map_margin = 12
+        map_x = x + map_margin
+        map_y = y + 38
+        map_w = width - map_margin * 2
+        map_h = height - 68
+
+        pygame.draw.rect(self.screen, Colors.BLACK, (map_x, map_y, map_w, map_h))
+        pygame.draw.rect(self.screen, Colors.GRAY, (map_x, map_y, map_w, map_h), 1)
+
+        # 简单网格辅助观察位置关系
+        for i in range(1, 4):
+            grid_x = map_x + int(map_w * i / 4)
+            grid_y = map_y + int(map_h * i / 4)
+            pygame.draw.line(self.screen, Colors.DARK_GRAY, (grid_x, map_y), (grid_x, map_y + map_h), 1)
+            pygame.draw.line(self.screen, Colors.DARK_GRAY, (map_x, grid_y), (map_x + map_w, grid_y), 1)
+
+        for idx, char in enumerate(characters):
+            x_ratio, y_ratio = world_map.normalize(char.position)
+            dot_x = map_x + int(x_ratio * map_w)
+            dot_y = map_y + map_h - int(y_ratio * map_h)
+            color = Colors.ORANGE if idx == 0 else Colors.CYAN
+            pygame.draw.circle(self.screen, color, (dot_x, dot_y), 6)
+            self.draw_text(char.name, dot_x + 8, dot_y - 8, color, "small")
+
+        footer = f"x:[{world_map.min_x:.0f},{world_map.max_x:.0f}] y:[{world_map.min_y:.0f},{world_map.max_y:.0f}]"
+        self.draw_text(footer, x + 10, y + height - 24, Colors.LIGHT_GRAY, "small")
 
     def draw_scene_log(self, logs: List[str], x: int, y: int, width: int, height: int) -> None:
         """绘制场景日志"""

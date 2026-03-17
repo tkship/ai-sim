@@ -8,6 +8,14 @@ world:
   start_day: 7
   cycles_per_day: 12
 
+# 地图配置（二维坐标系）
+map:
+  name: "黑风岭"
+  width: 120
+  height: 80
+  min_x: -60
+  min_y: -40
+
 # 境界配置
 realms:
   # 大境界配置

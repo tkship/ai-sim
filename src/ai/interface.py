@@ -122,6 +122,20 @@ class ChangeApplier:
             new_char = new_char.remove_item(item_name, count)
             logs.append(f"失去物品: {item_name} ×{count}")
 
+        # 应用位置变化
+        position_change = char_change.position
+        has_absolute = position_change.x is not None or position_change.y is not None
+        has_delta = position_change.dx != 0.0 or position_change.dy != 0.0
+        if has_absolute or has_delta:
+            x = float(new_char.position.x + position_change.dx)
+            y = float(new_char.position.y + position_change.dy)
+            if position_change.x is not None:
+                x = float(position_change.x)
+            if position_change.y is not None:
+                y = float(position_change.y)
+            new_char = new_char.with_position(x, y)
+            logs.append(f"位置变化: ({new_char.position.x:.1f}, {new_char.position.y:.1f})")
+
         # 应用法宝变化
         for treasure_change in char_change.treasure_changes:
             if not treasure_change.treasure_name:

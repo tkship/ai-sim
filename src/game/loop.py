@@ -161,7 +161,8 @@ class GameLoop:
 
         # 物品栏（左中）
         if chars:
-            self.ui.draw_inventory(chars[0], 10, 500, 380, 280)
+            self.ui.draw_map(self.world.map, chars, 10, 500, 380, 145)
+            self.ui.draw_inventory(chars[0], 10, 655, 380, 125)
 
         # 场景日志（右侧）
         self.ui.draw_scene_log(self.world.scene_logs, 410, 60, 780, 720)

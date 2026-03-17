@@ -34,12 +34,22 @@ class ItemChange:
 
 
 @dataclass
+class PositionChange:
+    """位置变化。"""
+    x: Optional[float] = None
+    y: Optional[float] = None
+    dx: float = 0.0
+    dy: float = 0.0
+
+
+@dataclass
 class CharacterChange:
     """单个角色的变化"""
     character_id: str
     attributes: AttributeChange = field(default_factory=AttributeChange)
     treasure_changes: list[TreasureChange] = field(default_factory=list)
     item_changes: ItemChange = field(default_factory=ItemChange)
+    position: PositionChange = field(default_factory=PositionChange)
 
 
 @dataclass
@@ -119,6 +129,14 @@ class ResponseParser:
                 if isinstance(item_data, dict):
                     char_change.item_changes.items_gained = item_data.get("获得", item_data.get("gained", {}))
                     char_change.item_changes.items_lost = item_data.get("失去", item_data.get("lost", {}))
+
+                # 位置变化（绝对坐标或位移）
+                pos_data = char_data.get("位置", char_data.get("position", {}))
+                if isinstance(pos_data, dict):
+                    char_change.position.x = pos_data.get("x")
+                    char_change.position.y = pos_data.get("y")
+                    char_change.position.dx = float(pos_data.get("dx", 0.0))
+                    char_change.position.dy = float(pos_data.get("dy", 0.0))
 
                 response.character_changes[char_id] = char_change
 

@@ -1,10 +1,10 @@
 """
 世界管理模块
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Dict, Any
-from datetime import datetime
 from ..character import Character
+from ..world import WorldMap
 
 
 @dataclass
@@ -69,13 +69,14 @@ class World:
     def __init__(self, config):
         self.config = config
         self.time = WorldTime()
+        self.map = WorldMap.from_config(config.get("map", {}))
         self.characters: Dict[str, Character] = {}
         self.scene_logs: List[str] = []
-        self.location = "黑风岭"
+        self.location = self.map.name
 
     def add_character(self, character: Character) -> None:
         """添加角色"""
-        self.characters[character.id] = character
+        self.characters[character.id] = self._clamp_character(character)
 
     def get_character(self, char_id: str) -> Character:
         """获取角色"""
@@ -83,7 +84,7 @@ class World:
 
     def update_character(self, character: Character) -> None:
         """更新角色"""
-        self.characters[character.id] = character
+        self.characters[character.id] = self._clamp_character(character)
 
     def get_all_characters(self) -> List[Character]:
         """获取所有角色"""
@@ -113,7 +114,19 @@ class World:
             "location": self.location,
             "time": self.time.display,
             "cycle": self.time.cycle,
+            "map": self.map.to_dict(),
+            "character_positions": [
+                {"id": char.id, "name": char.name, "x": char.position.x, "y": char.position.y}
+                for char in self.get_all_characters()
+            ],
         }
+
+    def _clamp_character(self, character: Character) -> Character:
+        """确保角色位置位于地图边界内。"""
+        clamped = self.map.clamp_position(character.position)
+        if clamped == character.position:
+            return character
+        return character.with_position(clamped.x, clamped.y)
 
     def to_save_dict(self) -> Dict[str, Any]:
         """转换为保存字典"""

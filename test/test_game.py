@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT_DIR))
 
 from src.ai import ChangeApplier, ResponseParser
 from src.character import Character, Element, MajorRealm, MinorRealm, Realm, SpiritRoot
+from src.game import World
 from src.item import Pill
 from src.world import (
     Config,
@@ -201,6 +202,49 @@ def test_pill_consumption() -> None:
     print("Pill consumption test passed!")
 
 
+def test_position_change_application() -> None:
+    """测试 AI 位置变化应用。"""
+    print_section("Testing Position Change Application")
+
+    character = Character.create("char_007", "临渊").with_position(1, 2)
+    response_json = json.dumps(
+        {
+            "交互概述": "角色移动",
+            "场景描述": "角色向东南方向移动",
+            "属性变化": {
+                "char_007": {
+                    "位置": {"dx": 3, "dy": -1}
+                }
+            },
+        },
+        ensure_ascii=False,
+    )
+
+    response = ResponseParser.parse(response_json)
+    assert response is not None
+    moved, logs = ChangeApplier.apply_to_character(character, response)
+    assert moved.position.x == 4
+    assert moved.position.y == 1
+    assert any("位置变化" in log for log in logs)
+    print("Position change application test passed!")
+
+
+def test_world_map_clamp() -> None:
+    """测试地图边界裁剪。"""
+    print_section("Testing World Map Clamp")
+
+    config = Config()
+    world = World(config)
+    character = Character.create("char_008", "玄舟").with_position(9999, -9999)
+
+    world.add_character(character)
+    clamped = world.get_character("char_008")
+
+    assert clamped.position.x == world.map.max_x
+    assert clamped.position.y == world.map.min_y
+    print("World map clamp test passed!")
+
+
 def test_save_load_roundtrip() -> None:
     """测试存档读档回环。"""
     print_section("Testing Save/Load Roundtrip")
@@ -210,6 +254,7 @@ def test_save_load_roundtrip() -> None:
     manager = SaveManager(db, config)
 
     character = Character.create("char_006", "顾辰")
+    character = character.with_position(42, -18)
     character = character.add_item("下品灵石", 20)
 
     state = GameState()
@@ -227,6 +272,8 @@ def test_save_load_roundtrip() -> None:
 
     restored = Character.from_save_dict(loaded.characters["char_006"])
     assert restored.inventory.get("下品灵石") == 20
+    assert restored.position.x == 42
+    assert restored.position.y == -18
     print("Save/load roundtrip test passed!")
 
 
@@ -243,6 +290,8 @@ async def main() -> None:
         test_ai_treasure_change_application()
         test_spirit_root_technique_constraint()
         test_pill_consumption()
+        test_position_change_application()
+        test_world_map_clamp()
         test_save_load_roundtrip()
 
         print("\n" + "=" * 60)
