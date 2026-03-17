@@ -1,29 +1,4 @@
-# detection-system Specification
-
-## Purpose
-TBD - created by archiving change pure-text-xianxia-game. Update Purpose after archive.
-## Requirements
-### Requirement: Detection Range
-系统 SHALL 根据角色神识计算探测范围。
-
-#### Scenario: Detection Range Calculation
-- **WHEN** 计算探测范围
-- **THEN** 系统基于角色神识值确定探测范围
-
-#### Scenario: Detection Bonus
-- **WHEN** 计算探测范围
-- **THEN** 系统应用法宝或功法带来的探测力加成
-
-### Requirement: Character Detection
-系统 SHALL 检测探测范围内的其他角色。
-
-#### Scenario: Proximity Check
-- **WHEN** 每游戏循环
-- **THEN** 系统检查每个角色探测范围内是否有其他角色
-
-#### Scenario: Detection Information
-- **WHEN** 检测到其他角色
-- **THEN** 系统提供基于神识的目标信息（境界、状态等）
+## MODIFIED Requirements
 
 ### Requirement: Multi-Character Interaction
 系统 SHALL 处理多角色交互场景，并将交互组作为 AI 更新的统一单位。
@@ -50,4 +25,3 @@ TBD - created by archiving change pure-text-xianxia-game. Update Purpose after a
 #### Scenario: Unified Processing Path
 - **WHEN** 系统处理独立角色
 - **THEN** 系统沿用与多人交互组相同的解析、审计和应用流程，而不是使用单独的响应协议
-

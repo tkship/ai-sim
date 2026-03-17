@@ -1,143 +1,165 @@
-"""
-AI 接口和属性变化应用模块
-"""
-from typing import Optional, Any
+"""AI orchestration, auditing, and audited change application."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from ..character import Character
+from .audit import AuditResult, AuditValidator
 from .parser import AIResponse, ResponseParser
 from .prompt import PromptBuilder
-from ..character import Character
+
+
+@dataclass
+class GroupProcessResult:
+    response: AIResponse | None
+    audit_result: AuditResult | None
+    updated_characters: list[Character]
+    character_logs: dict[str, list[str]] = field(default_factory=dict)
 
 
 class AIInterface:
-    """AI 接口"""
+    """Minimal AI client abstraction."""
 
-    def __init__(self, api_url: str = "", api_key: str = "", model: str = ""):
+    def __init__(
+        self,
+        api_url: str = "",
+        api_key: str = "",
+        model: str = "",
+        responder: Callable[[str], str] | None = None,
+    ):
         self.api_url = api_url
         self.api_key = api_key
         self.model = model
+        self.responder = responder
 
-    async def request_decision(
-        self,
-        prompt: str
-    ) -> Optional[AIResponse]:
-        """
-        请求 AI 决策（模拟版，实际项目中应该调用真实 API）
+    async def request_decision(self, prompt: str) -> AIResponse | None:
+        """Request one group update from the AI."""
+        if self.responder is not None:
+            return ResponseParser.parse(self.responder(prompt))
 
-        Args:
-            prompt: 提示词
-
-        Returns:
-            AI 响应或 None
-        """
-        # 这是模拟实现，实际项目中应该调用真实的 LLM API
-        # 这里返回一个简单的示例响应
-        import json
         mock_response = {
-            "交互概述": "角色选择继续修炼",
-            "场景描述": "角色闭目打坐，运转功法修炼...",
-            "属性变化": {
-                "char_001": {
-                    "灵力": 5,
-                    "状态": {
-                        "新增": [],
-                        "移除": []
-                    },
-                    "法宝变化": [],
-                    "物品变化": {
-                        "获得": {},
-                        "失去": {}
-                    }
+            "participants": ["char_001"],
+            "scene_summary": "角色选择继续修炼",
+            "scene_description": "角色闭目打坐，运转功法继续调息。",
+            "events": [
+                {
+                    "type": "cultivate",
+                    "actor_id": "char_001",
+                    "description": "角色平稳运转功法。",
                 }
-            }
+            ],
+            "character_updates": {
+                "char_001": {
+                    "intent": {
+                        "summary": "继续修炼并恢复部分灵力",
+                        "target_ids": [],
+                    },
+                    "action": {
+                        "action_type": "cultivate",
+                        "target_ids": [],
+                    },
+                    "basis": {
+                        "resource_basis": {
+                            "mp_cost": -5,
+                        },
+                        "effect_basis": {
+                            "primary_effect": "恢复少量灵力",
+                        },
+                    },
+                    "attribute_changes": {
+                        "mp_delta": 5,
+                        "status": {
+                            "add": [],
+                            "remove": [],
+                        },
+                    },
+                    "item_changes": {
+                        "gained": {},
+                        "lost": {},
+                    },
+                }
+            },
         }
-        json_str = json.dumps(mock_response, ensure_ascii=False)
-        return ResponseParser.parse(json_str)
+        return ResponseParser.parse(json.dumps(mock_response, ensure_ascii=False))
 
 
 class ChangeApplier:
-    """属性变化应用器"""
+    """Apply already-audited group updates to characters."""
+
+    @staticmethod
+    def apply_group_update(
+        characters: list[Character],
+        response: AIResponse,
+    ) -> tuple[list[Character], dict[str, list[str]]]:
+        new_characters: list[Character] = []
+        all_logs: dict[str, list[str]] = {}
+
+        for character in characters:
+            new_character, logs = ChangeApplier.apply_to_character(character, response)
+            new_characters.append(new_character)
+            if logs:
+                all_logs[character.id] = logs
+
+        return new_characters, all_logs
 
     @staticmethod
     def apply_to_character(
         character: Character,
-        response: AIResponse
+        response: AIResponse,
     ) -> tuple[Character, list[str]]:
-        """
-        将 AI 响应中的变化应用到角色
+        logs: list[str] = []
+        char_update = response.character_updates.get(character.id)
+        if char_update is None:
+            for update in response.character_updates.values():
+                if update.character_id == character.name:
+                    char_update = update
+                    break
+        if char_update is None:
+            return character, logs
 
-        Args:
-            character: 原始角色
-            response: AI 响应
-
-        Returns:
-            (新角色对象, 变化日志列表)
-        """
-        logs = []
         new_char = character
+        attributes = char_update.attributes
+        if attributes.hp_delta != 0:
+            new_char = new_char.with_attributes(new_char.attributes.with_hp_delta(attributes.hp_delta))
+            logs.append(f"血量变化: {attributes.hp_delta:+d}")
+        if attributes.mp_delta != 0:
+            new_char = new_char.with_attributes(new_char.attributes.with_mp_delta(attributes.mp_delta))
+            logs.append(f"灵力变化: {attributes.mp_delta:+d}")
+        if attributes.spirit_delta != 0:
+            new_char = new_char.with_attributes(new_char.attributes.with_spirit_delta(attributes.spirit_delta))
+            logs.append(f"神识变化: {attributes.spirit_delta:+d}")
 
-        # 查找该角色的变化
-        char_change = None
-        for cid, change in response.character_changes.items():
-            if cid == character.id or cid == character.name:
-                char_change = change
-                break
-
-        if not char_change:
-            return new_char, logs
-
-        # 应用属性变化
-        attr = char_change.attributes
-        if attr.hp_delta != 0:
-            new_attr = new_char.attributes.with_hp_delta(attr.hp_delta)
-            new_char = new_char.with_attributes(new_attr)
-            logs.append(f"血量变化: {attr.hp_delta:+d}")
-
-        if attr.mp_delta != 0:
-            new_attr = new_char.attributes.with_mp_delta(attr.mp_delta)
-            new_char = new_char.with_attributes(new_attr)
-            logs.append(f"灵力变化: {attr.mp_delta:+d}")
-
-        if attr.spirit_delta != 0:
-            new_attr = new_char.attributes.with_spirit_delta(attr.spirit_delta)
-            new_char = new_char.with_attributes(new_attr)
-            logs.append(f"神识变化: {attr.spirit_delta:+d}")
-
-        # 应用状态变化
-        for status in attr.status_add:
-            new_attr = new_char.attributes.add_status(status)
-            new_char = new_char.with_attributes(new_attr)
+        for status in attributes.status_add:
+            new_char = new_char.with_attributes(new_char.attributes.add_status(status))
             logs.append(f"添加状态: {status}")
-
-        for status in attr.status_remove:
-            new_attr = new_char.attributes.remove_status(status)
-            new_char = new_char.with_attributes(new_attr)
+        for status in attributes.status_remove:
+            new_char = new_char.with_attributes(new_char.attributes.remove_status(status))
             logs.append(f"移除状态: {status}")
 
-        # 应用物品变化
-        item_change = char_change.item_changes
-        for item_name, count in item_change.items_gained.items():
+        for item_name, count in char_update.item_changes.items_gained.items():
             new_char = new_char.add_item(item_name, count)
-            logs.append(f"获得物品: {item_name} ×{count}")
-
-        for item_name, count in item_change.items_lost.items():
+            logs.append(f"获得物品: {item_name} x{count}")
+        for item_name, count in char_update.item_changes.items_lost.items():
             new_char = new_char.remove_item(item_name, count)
-            logs.append(f"失去物品: {item_name} ×{count}")
+            logs.append(f"失去物品: {item_name} x{count}")
 
-        # 应用位置变化
-        position_change = char_change.position
-        has_absolute = position_change.x is not None or position_change.y is not None
-        has_delta = position_change.dx != 0.0 or position_change.dy != 0.0
+        position = char_update.position
+        has_absolute = position.x is not None or position.y is not None
+        has_delta = position.dx != 0.0 or position.dy != 0.0
         if has_absolute or has_delta:
-            x = float(new_char.position.x + position_change.dx)
-            y = float(new_char.position.y + position_change.dy)
-            if position_change.x is not None:
-                x = float(position_change.x)
-            if position_change.y is not None:
-                y = float(position_change.y)
+            x = float(new_char.position.x + position.dx)
+            y = float(new_char.position.y + position.dy)
+            if position.x is not None:
+                x = position.x
+            if position.y is not None:
+                y = position.y
             new_char = new_char.with_position(x, y)
             logs.append(f"位置变化: ({new_char.position.x:.1f}, {new_char.position.y:.1f})")
 
-        # 应用法宝变化
-        for treasure_change in char_change.treasure_changes:
+        for treasure_change in char_update.treasure_changes:
             if not treasure_change.treasure_name:
                 continue
             new_char = new_char.apply_treasure_change(
@@ -153,114 +175,91 @@ class ChangeApplier:
 
         return new_char, logs
 
-    @staticmethod
-    def apply_to_characters(
-        characters: list[Character],
-        response: AIResponse
-    ) -> tuple[list[Character], dict[str, list[str]]]:
-        """
-        将变化应用到多个角色
-
-        Args:
-            characters: 原始角色列表
-            response: AI 响应
-
-        Returns:
-            (新角色列表, {角色ID: 变化日志列表})
-        """
-        new_characters = []
-        all_logs = {}
-
-        for char in characters:
-            new_char, logs = ChangeApplier.apply_to_character(char, response)
-            new_characters.append(new_char)
-            if logs:
-                all_logs[char.id] = logs
-
-        return new_characters, all_logs
-
 
 class AICoordinator:
-    """AI 协调器 - 整合提示词构建、AI 请求、响应解析、变化应用"""
+    """Coordinate prompt construction, AI request, audit, and audited apply."""
 
     def __init__(self, ai_interface: AIInterface, prompt_builder: PromptBuilder):
         self.ai_interface = ai_interface
         self.prompt_builder = prompt_builder
+
+    async def process_character_group(
+        self,
+        characters: list[Character],
+        environment: dict[str, Any],
+        treasures_data: dict[str, Any],
+        techniques_data: dict[str, Any],
+    ) -> GroupProcessResult:
+        prompt = self.prompt_builder.build_group_prompt(
+            characters,
+            environment,
+            treasures_data,
+            techniques_data,
+        )
+        response = await self.ai_interface.request_decision(prompt)
+        if response is None:
+            return GroupProcessResult(
+                response=None,
+                audit_result=None,
+                updated_characters=characters,
+            )
+
+        audit_result = AuditValidator.audit_group_update(
+            response,
+            characters,
+            treasures_data,
+            techniques_data,
+        )
+        if not audit_result.ok or audit_result.update is None:
+            return GroupProcessResult(
+                response=response,
+                audit_result=audit_result,
+                updated_characters=characters,
+            )
+
+        updated_characters, logs = ChangeApplier.apply_group_update(
+            characters,
+            audit_result.update,
+        )
+        return GroupProcessResult(
+            response=response,
+            audit_result=audit_result,
+            updated_characters=updated_characters,
+            character_logs=logs,
+        )
 
     async def process_single_character(
         self,
         character: Character,
         environment: dict[str, Any],
         treasures_data: dict[str, Any],
-        techniques_data: dict[str, Any]
-    ) -> tuple[Character, AIResponse, list[str]]:
-        """
-        处理单个角色的决策流程
-
-        Args:
-            character: 角色
-            environment: 环境信息
-            treasures_data: 法宝数据
-            techniques_data: 功法数据
-
-        Returns:
-            (新角色, AI响应, 变化日志)
-        """
-        # 构建提示词
-        prompt = self.prompt_builder.build_single_character_prompt(
-            character, environment, treasures_data, techniques_data
+        techniques_data: dict[str, Any],
+    ) -> tuple[Character, AIResponse | None, list[str]]:
+        result = await self.process_character_group(
+            [character],
+            environment,
+            treasures_data,
+            techniques_data,
         )
-
-        # 请求 AI 决策
-        response = await self.ai_interface.request_decision(prompt)
-        if not response:
-            return character, None, []
-
-        # 验证响应
-        is_valid, errors = ResponseParser.validate(response)
-        if not is_valid:
-            return character, response, errors
-
-        # 应用变化
-        new_char, logs = ChangeApplier.apply_to_character(character, response)
-
-        return new_char, response, logs
+        logs = result.character_logs.get(character.id, [])
+        if result.audit_result and not result.audit_result.ok:
+            logs = result.audit_result.error_messages()
+        updated = result.updated_characters[0] if result.updated_characters else character
+        return updated, result.response, logs
 
     async def process_interaction_group(
         self,
         characters: list[Character],
         environment: dict[str, Any],
         treasures_data: dict[str, Any],
-        techniques_data: dict[str, Any]
-    ) -> tuple[list[Character], AIResponse, dict[str, list[str]]]:
-        """
-        处理交互组的决策流程
-
-        Args:
-            characters: 角色列表
-            environment: 环境信息
-            treasures_data: 法宝数据
-            techniques_data: 功法数据
-
-        Returns:
-            (新角色列表, AI响应, {角色ID: 变化日志})
-        """
-        # 构建提示词
-        prompt = self.prompt_builder.build_multi_character_prompt(
-            characters, environment, treasures_data, techniques_data
+        techniques_data: dict[str, Any],
+    ) -> tuple[list[Character], AIResponse | None, dict[str, list[str]]]:
+        result = await self.process_character_group(
+            characters,
+            environment,
+            treasures_data,
+            techniques_data,
         )
-
-        # 请求 AI 决策
-        response = await self.ai_interface.request_decision(prompt)
-        if not response:
-            return characters, None, {}
-
-        # 验证响应
-        is_valid, errors = ResponseParser.validate(response)
-        if not is_valid:
-            return characters, response, {err: [] for err in errors}
-
-        # 应用变化
-        new_chars, logs = ChangeApplier.apply_to_characters(characters, response)
-
-        return new_chars, response, logs
+        if result.audit_result and not result.audit_result.ok:
+            return characters, result.response, {"audit_errors": result.audit_result.error_messages()}
+        return result.updated_characters, result.response, result.character_logs

@@ -1,8 +1,5 @@
-# ai-interaction Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change pure-text-xianxia-game. Update Purpose after archive.
-## Requirements
 ### Requirement: Prompt Construction
 系统 SHALL 将角色信息打包成结构化提示词发送给 AI，并明确声明按交互组返回的响应协议。
 
@@ -47,4 +44,3 @@ TBD - created by archiving change pure-text-xianxia-game. Update Purpose after a
 #### Scenario: Group Scene Logging
 - **WHEN** 交互组响应通过审计
 - **THEN** 系统记录组级场景摘要和场景描述作为本轮共享日志
-

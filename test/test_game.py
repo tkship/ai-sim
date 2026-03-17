@@ -8,9 +8,9 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
-from src.ai import ChangeApplier, ResponseParser
+from src.ai import AIInterface, AuditValidator, ChangeApplier, PromptBuilder, ResponseParser
 from src.character import Character, Element, MajorRealm, MinorRealm, Realm, SpiritRoot
-from src.game import World
+from src.game import GameLoop, World
 from src.item import Pill
 from src.world import (
     Config,
@@ -44,6 +44,27 @@ def print_section(title: str) -> None:
     print("\n" + "=" * 60)
     print(title)
     print("=" * 60)
+
+
+def make_character(
+    char_id: str,
+    name: str,
+    *,
+    hp: int = 100,
+    mp: int = 60,
+    spirit: int = 20,
+    position: tuple[float, float] = (0, 0),
+) -> Character:
+    character = Character.create(char_id, name, base_hp=hp, base_mp=mp, base_spirit=spirit)
+    return character.with_position(*position)
+
+
+def initialize_repositories() -> tuple[dict[str, dict], dict[str, dict]]:
+    db = Database()
+    initialize_sample_data(db)
+    treasures = {item["name"]: item for item in TreasureRepository(db).get_all()}
+    techniques = {item["name"]: item for item in TechniqueRepository(db).get_all()}
+    return treasures, techniques
 
 
 def test_character_system() -> Character:
@@ -135,18 +156,28 @@ def test_ai_treasure_change_application() -> None:
 
     response_json = json.dumps(
         {
-            "交互概述": "角色试剑",
-            "场景描述": "剑气纵横",
-            "属性变化": {
+            "participants": ["char_003"],
+            "scene_summary": "角色试剑",
+            "scene_description": "剑气纵横",
+            "events": [],
+            "character_updates": {
                 "char_003": {
-                    "法宝变化": [
+                    "intent": {"summary": "试探法宝状态", "target_ids": []},
+                    "action": {"action_type": "attack", "target_ids": []},
+                    "basis": {
+                        "resource_basis": {},
+                        "effect_basis": {"primary_effect": "法宝损耗"},
+                    },
+                    "attribute_changes": {},
+                    "item_changes": {"gained": {}, "lost": {}},
+                    "treasure_changes": [
                         {
-                            "法宝名称": "玄金剑",
-                            "损耗度变化": -10,
-                            "耐久度变化": -8,
-                            "当前注入灵力": 12,
+                            "treasure_name": "玄金剑",
+                            "wear_delta": -10,
+                            "durability_delta": -8,
+                            "injected_spirit": 12,
                         }
-                    ]
+                    ],
                 }
             },
         },
@@ -154,6 +185,7 @@ def test_ai_treasure_change_application() -> None:
     )
 
     response = ResponseParser.parse(response_json)
+    assert response is not None
     new_character, logs = ChangeApplier.apply_to_character(character, response)
     state = new_character.treasure_states.get("玄金剑", {})
 
@@ -209,11 +241,21 @@ def test_position_change_application() -> None:
     character = Character.create("char_007", "临渊").with_position(1, 2)
     response_json = json.dumps(
         {
-            "交互概述": "角色移动",
-            "场景描述": "角色向东南方向移动",
-            "属性变化": {
+            "participants": ["char_007"],
+            "scene_summary": "角色移动",
+            "scene_description": "角色向东南方向移动",
+            "events": [],
+            "character_updates": {
                 "char_007": {
-                    "位置": {"dx": 3, "dy": -1}
+                    "intent": {"summary": "移动到更安全的位置", "target_ids": []},
+                    "action": {"action_type": "move", "target_ids": []},
+                    "basis": {
+                        "resource_basis": {},
+                        "effect_basis": {"primary_effect": "位移"},
+                    },
+                    "attribute_changes": {},
+                    "item_changes": {"gained": {}, "lost": {}},
+                    "position": {"dx": 3, "dy": -1},
                 }
             },
         },
@@ -227,6 +269,324 @@ def test_position_change_application() -> None:
     assert moved.position.y == 1
     assert any("位置变化" in log for log in logs)
     print("Position change application test passed!")
+
+
+def test_group_response_parsing() -> None:
+    """测试组级响应解析。"""
+    print_section("Testing Group Response Parsing")
+
+    single_payload = {
+        "participants": ["char_010"],
+        "scene_summary": "顾辰独自调息恢复灵力",
+        "scene_description": "洞府内灵气回旋，顾辰稳住气机继续修炼。",
+        "events": [{"type": "cultivate", "actor_id": "char_010", "description": "顾辰运转功法调息一个周天"}],
+        "character_updates": {
+            "char_010": {
+                "intent": {"summary": "继续修炼并恢复灵力", "target_ids": []},
+                "action": {"action_type": "cultivate", "target_ids": [], "technique_name": "太虚纳灵诀"},
+                "basis": {
+                    "resource_basis": {"mp_cost": -8, "technique_name": "太虚纳灵诀"},
+                    "effect_basis": {"primary_effect": "灵力恢复", "factors": ["环境灵气平稳", "修炼状态专注"]},
+                },
+                "attribute_changes": {"mp_delta": 8, "status": {"add": ["入定"], "remove": []}},
+                "item_changes": {"gained": {}, "lost": {}},
+            }
+        },
+    }
+
+    multi_payload = {
+        "participants": ["char_011", "char_012"],
+        "scene_summary": "两名修士短暂交锋后各自收招",
+        "scene_description": "林间剑气与掌风碰撞，短促试探后双方重新拉开距离。",
+        "events": [
+            {"type": "clash", "actor_id": "char_011", "target_ids": ["char_012"], "description": "剑气与掌风正面碰撞"},
+            {"type": "move", "actor_id": "char_012", "target_ids": ["char_011"], "description": "双方各退半步"},
+        ],
+        "character_updates": [
+            {
+                "character_id": "char_011",
+                "intent": {"summary": "试探对手底细", "target_ids": ["char_012"]},
+                "action": {"action_type": "attack", "target_ids": ["char_012"], "treasure_name": "玄金剑"},
+                "basis": {
+                    "resource_basis": {"mp_cost": 6, "treasure_costs": [{"treasure_name": "玄金剑", "wear_delta": -2}]},
+                    "effect_basis": {"primary_effect": "形成试探性剑气", "result_reference": "events[0]"},
+                },
+                "attribute_changes": {"mp_delta": -6},
+                "item_changes": {"gained": {}, "lost": {}},
+            },
+            {
+                "character_id": "char_012",
+                "intent": {"summary": "挡下攻击并拉开身位", "target_ids": ["char_011"]},
+                "action": {"action_type": "defend", "target_ids": ["char_011"]},
+                "basis": {
+                    "resource_basis": {"mp_cost": 3},
+                    "effect_basis": {"primary_effect": "化解冲击", "factors": ["借力后退"]},
+                },
+                "attribute_changes": {"mp_delta": -3, "status": {"add": [], "remove": []}},
+                "item_changes": {"gained": {}, "lost": {}},
+                "position": {"dx": -1, "dy": 0},
+            },
+        ],
+    }
+
+    invalid_payload = {
+        "participants": ["char_013"],
+        "scene_description": "角色试图突破但依据不完整。",
+        "character_updates": {
+            "char_013": {
+                "intent": {"target_ids": []},
+                "action": {"target_ids": []},
+                "basis": {"effect_basis": {"primary_effect": "尝试冲击瓶颈"}},
+            }
+        },
+    }
+
+    single = ResponseParser.parse(json.dumps(single_payload, ensure_ascii=False))
+    assert single is not None
+    valid, errors = ResponseParser.validate(single)
+    assert valid, errors
+    assert single.participants == ["char_010"]
+    assert single.character_updates["char_010"].basis.resource_basis.mp_cost == -8
+
+    multi = ResponseParser.parse(json.dumps(multi_payload, ensure_ascii=False))
+    assert multi is not None
+    valid, errors = ResponseParser.validate(multi)
+    assert valid, errors
+    assert set(multi.character_updates.keys()) == {"char_011", "char_012"}
+    assert multi.character_updates["char_011"].treasure_changes[0].treasure_name == "玄金剑"
+    assert multi.character_updates["char_012"].position.dx == -1
+
+    invalid = ResponseParser.parse(json.dumps(invalid_payload, ensure_ascii=False))
+    assert invalid is not None
+    valid, errors = ResponseParser.validate(invalid)
+    assert not valid
+    assert "缺少组级字段: scene_summary" in errors
+    assert "character_updates[char_013] 缺少字段: intent.summary" in errors
+    assert "character_updates[char_013] 缺少字段: action.action_type" in errors
+    assert "character_updates[char_013] 缺少字段: basis.resource_basis" in errors
+    print("Group response parsing test passed!")
+
+
+def test_prompt_builder_protocol() -> None:
+    """测试提示词声明了组协议和白名单。"""
+    print_section("Testing Prompt Builder Protocol")
+
+    treasures, techniques = initialize_repositories()
+    character = make_character("char_020", "顾辰")
+    character = character.equip_item("weapon", "玄金剑", treasures["玄金剑"])
+    prompt = PromptBuilder.build_group_prompt(
+        [character],
+        {
+            "location": "黑风岭",
+            "time": "修真历 3842 年 3 月 7 日",
+            "cycle": 1,
+            "map": {"name": "黑风岭"},
+            "character_positions": [],
+        },
+        treasures,
+        techniques,
+    )
+
+    assert '"allowed_action_types"' in prompt
+    assert '"allowed_event_types"' in prompt
+    assert '"basis_required_fields"' in prompt
+    assert '"participants"' in prompt
+    print("Prompt builder protocol test passed!")
+
+
+def test_audit_hard_failures() -> None:
+    """测试强审计硬失败场景。"""
+    print_section("Testing Audit Hard Failures")
+
+    treasures, techniques = initialize_repositories()
+    attacker = make_character("char_101", "林川", mp=20)
+    defender = make_character("char_102", "苏禾", mp=20)
+    attacker = attacker.add_item("回灵丹", 1).equip_item("weapon", "玄金剑", treasures["玄金剑"])
+
+    payload = {
+        "participants": ["char_101", "char_999"],
+        "scene_summary": "一场混乱的交锋",
+        "scene_description": "AI 返回了不可信的共享事实和资源账本。",
+        "events": [
+            {"type": "unknown_event", "actor_id": "char_101", "target_ids": ["char_102"], "description": "异常事件"},
+            {"type": "attack", "actor_id": "char_101", "target_ids": ["char_102"], "description": "剑光掠过"},
+            {"type": "attack", "actor_id": "char_101", "target_ids": ["char_102"], "description": "却又说是掌风掠过"},
+        ],
+        "character_updates": {
+            "char_101": {
+                "intent": {"summary": "猛攻", "target_ids": ["char_102"]},
+                "action": {"action_type": "illegal_action", "target_ids": ["char_102"], "treasure_name": "玄金剑"},
+                "basis": {
+                    "resource_basis": {"mp_cost": 30},
+                    "effect_basis": {"primary_effect": "造成伤害"},
+                },
+                "attribute_changes": {"mp_delta": -30},
+                "item_changes": {"gained": {}, "lost": {"回灵丹": 2}},
+            },
+            "char_102": {
+                "intent": {"summary": "防御", "target_ids": ["char_101"]},
+                "action": {"action_type": "defend", "target_ids": ["char_101"]},
+                "basis": {
+                    "resource_basis": {"mp_cost": 1},
+                    "effect_basis": {"primary_effect": "招架"},
+                },
+                "attribute_changes": {"mp_delta": -1},
+                "item_changes": {"gained": {}, "lost": {}},
+            },
+        },
+    }
+
+    update = ResponseParser.parse(json.dumps(payload, ensure_ascii=False))
+    assert update is not None
+    result = AuditValidator.audit_group_update(update, [attacker, defender], treasures, techniques)
+
+    assert not result.ok
+    messages = "\n".join(result.error_messages())
+    assert "组成员不一致" in messages
+    assert "非法事件类型" in messages
+    assert "共享事实冲突" in messages
+    assert "非法行为类型" in messages
+    assert "物品不足" in messages
+    assert "超界过大" in messages
+    print("Audit hard failures test passed!")
+
+
+def test_audit_safe_clipping() -> None:
+    """测试安全裁剪场景。"""
+    print_section("Testing Audit Safe Clipping")
+
+    treasures, techniques = initialize_repositories()
+    character = make_character("char_201", "季衡", hp=50, mp=30, spirit=20)
+    character = character.equip_item("weapon", "玄金剑", treasures["玄金剑"])
+    character = character.with_attributes(
+        character.attributes.with_hp_delta(-10).with_mp_delta(-5).with_spirit_delta(-3)
+    )
+
+    payload = {
+        "participants": ["char_201"],
+        "scene_summary": "灵力调动稍有偏差",
+        "scene_description": "角色尝试催动法宝，数值略微超界后被代码安全裁剪。",
+        "events": [{"type": "attack", "actor_id": "char_201", "target_ids": [], "description": "法宝鸣动"}],
+        "character_updates": {
+            "char_201": {
+                "intent": {"summary": "催动法宝试探边界", "target_ids": []},
+                "action": {"action_type": "attack", "target_ids": [], "treasure_name": "玄金剑"},
+                "basis": {
+                    "resource_basis": {"mp_cost": 2, "treasure_costs": [{"treasure_name": "玄金剑", "wear_delta": 5, "durability_delta": -3}]},
+                    "effect_basis": {"primary_effect": "释放试探性剑气"},
+                },
+                "attribute_changes": {"hp_delta": 15, "mp_delta": 7, "spirit_delta": 4},
+                "item_changes": {"gained": {}, "lost": {}},
+                "treasure_changes": [{"treasure_name": "玄金剑", "wear_delta": 5, "durability_delta": -3, "injected_spirit": 14}],
+            }
+        },
+    }
+
+    update = ResponseParser.parse(json.dumps(payload, ensure_ascii=False))
+    assert update is not None
+    result = AuditValidator.audit_group_update(update, [character], treasures, techniques)
+
+    assert result.ok
+    clipped = {entry.path: (entry.original, entry.clipped) for entry in result.clipped_values}
+    assert clipped["character_updates[char_201].attribute_changes.hp_delta"] == (15, 10)
+    assert clipped["character_updates[char_201].attribute_changes.mp_delta"] == (7, 5)
+    assert clipped["character_updates[char_201].attribute_changes.spirit_delta"] == (4, 3)
+    assert clipped["character_updates[char_201].treasure_changes[0].wear_delta"] == (5, 0)
+    assert clipped["character_updates[char_201].treasure_changes[0].injected_spirit"] == (14, 10)
+    print("Audit safe clipping test passed!")
+
+
+async def test_group_apply_flow() -> None:
+    """测试通过审计后的组级应用与失败不落地。"""
+    print_section("Testing Group Apply Flow")
+
+    config = Config()
+    game = GameLoop(config)
+
+    attacker = make_character("char_301", "顾辰", position=(0, 0))
+    defender = make_character("char_302", "白芷", position=(2, 0))
+    attacker = attacker.with_attributes(attacker.attributes.with_mp_delta(-5))
+    attacker = attacker.add_item("回灵丹", 1)
+
+    game.add_character(attacker)
+    game.add_character(defender)
+
+    success_payload = {
+        "participants": ["char_301", "char_302"],
+        "scene_summary": "顾辰与白芷短暂切磋",
+        "scene_description": "两人点到为止，顾辰消耗一枚回灵丹后气息稍稳。",
+        "events": [{"type": "interact", "actor_id": "char_301", "target_ids": ["char_302"], "description": "短暂切磋后停手"}],
+        "character_updates": {
+            "char_301": {
+                "intent": {"summary": "切磋并恢复状态", "target_ids": ["char_302"]},
+                "action": {"action_type": "consume_item", "target_ids": ["char_302"], "item_name": "回灵丹"},
+                "basis": {
+                    "resource_basis": {"item_costs": {"回灵丹": 1}},
+                    "effect_basis": {"primary_effect": "恢复部分灵力"},
+                },
+                "attribute_changes": {"mp_delta": 5},
+                "item_changes": {"gained": {}, "lost": {"回灵丹": 1}},
+            },
+            "char_302": {
+                "intent": {"summary": "试探后收手", "target_ids": ["char_301"]},
+                "action": {"action_type": "defend", "target_ids": ["char_301"]},
+                "basis": {
+                    "resource_basis": {"mp_cost": 0},
+                    "effect_basis": {"primary_effect": "稳住身形"},
+                },
+                "attribute_changes": {},
+                "item_changes": {"gained": {}, "lost": {}},
+            },
+        },
+    }
+
+    game.ai_interface.responder = lambda prompt: json.dumps(success_payload, ensure_ascii=False)
+    await game._process_ai_group(game.world.get_all_characters(), game.world.get_environment_dict(), {}, {})
+
+    updated_attacker = game.world.get_character("char_301")
+    assert updated_attacker.inventory.get("回灵丹", 0) == 0
+    assert updated_attacker.attributes.mp.current == attacker.attributes.mp.current + 5
+    assert any("顾辰与白芷短暂切磋" in log for log in game.world.scene_logs)
+    assert any("两人点到为止" in log for log in game.world.scene_logs)
+
+    before_logs = len(game.world.scene_logs)
+    failed_payload = {
+        "participants": ["char_301", "char_302"],
+        "scene_summary": "异常返回",
+        "scene_description": "这组结果应当被整组拒绝。",
+        "events": [{"type": "interact", "actor_id": "char_301", "target_ids": ["char_302"], "description": "再次交手"}],
+        "character_updates": {
+            "char_301": {
+                "intent": {"summary": "继续强攻", "target_ids": ["char_302"]},
+                "action": {"action_type": "attack", "target_ids": ["char_302"]},
+                "basis": {
+                    "resource_basis": {"mp_cost": 999},
+                    "effect_basis": {"primary_effect": "虚假输出"},
+                },
+                "attribute_changes": {"mp_delta": -999},
+                "item_changes": {"gained": {}, "lost": {}},
+            },
+            "char_302": {
+                "intent": {"summary": "防守", "target_ids": ["char_301"]},
+                "action": {"action_type": "defend", "target_ids": ["char_301"]},
+                "basis": {
+                    "resource_basis": {"mp_cost": 0},
+                    "effect_basis": {"primary_effect": "尝试防守"},
+                },
+                "attribute_changes": {},
+                "item_changes": {"gained": {}, "lost": {}},
+            },
+        },
+    }
+
+    game.ai_interface.responder = lambda prompt: json.dumps(failed_payload, ensure_ascii=False)
+    await game._process_ai_group(game.world.get_all_characters(), game.world.get_environment_dict(), {}, {})
+
+    failed_attacker = game.world.get_character("char_301")
+    assert failed_attacker.attributes.mp.current == updated_attacker.attributes.mp.current
+    assert len(game.world.scene_logs) > before_logs
+    assert any("AI审计失败" in log for log in game.world.scene_logs[before_logs:])
+    print("Group apply flow test passed!")
 
 
 def test_world_map_clamp() -> None:
@@ -291,6 +651,11 @@ async def main() -> None:
         test_spirit_root_technique_constraint()
         test_pill_consumption()
         test_position_change_application()
+        test_group_response_parsing()
+        test_prompt_builder_protocol()
+        test_audit_hard_failures()
+        test_audit_safe_clipping()
+        await test_group_apply_flow()
         test_world_map_clamp()
         test_save_load_roundtrip()
 
@@ -305,7 +670,10 @@ async def main() -> None:
         import traceback
 
         traceback.print_exc()
+        raise
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+

@@ -1,207 +1,178 @@
-"""
-AI 提示词构建模块
-"""
+"""Prompt construction for group-based AI updates."""
+
+from __future__ import annotations
+
+import json
 from typing import Any
+
+from .audit import ALLOWED_ACTION_TYPES, ALLOWED_EVENT_TYPES
 from ..character import Character
 
 
 class PromptBuilder:
-    """提示词构建器"""
+    """Build prompts for single-character and interaction-group updates."""
+
+    @staticmethod
+    def build_group_prompt(
+        characters: list[Character],
+        environment: dict[str, Any],
+        treasures_data: dict[str, Any],
+        techniques_data: dict[str, Any],
+    ) -> str:
+        payload = {
+            "participants": [PromptBuilder._character_payload(character) for character in characters],
+            "environment": PromptBuilder._environment_payload(environment),
+            "protocol": {
+                "top_level_required_fields": [
+                    "participants",
+                    "scene_summary",
+                    "scene_description",
+                    "events",
+                    "character_updates",
+                ],
+                "character_required_fields": [
+                    "character_id",
+                    "intent",
+                    "action",
+                    "basis",
+                    "attribute_changes",
+                    "item_changes",
+                ],
+                "basis_required_fields": [
+                    "basis.resource_basis",
+                    "basis.effect_basis",
+                ],
+                "allowed_action_types": sorted(ALLOWED_ACTION_TYPES),
+                "allowed_event_types": sorted(ALLOWED_EVENT_TYPES),
+            },
+            "knowledge": {
+                "treasures": PromptBuilder._filter_relevant_treasures(characters, treasures_data),
+                "techniques": PromptBuilder._filter_relevant_techniques(characters, techniques_data),
+            },
+        }
+
+        instructions = [
+            "你必须只输出一个 JSON 对象，不要输出解释。",
+            "所有角色必须统一按一个 GroupUpdate 返回；单角色也必须返回 participants 和 character_updates。",
+            "participants 必须与输入角色 ID 完全一致，character_updates 必须覆盖组内全部角色且不能包含组外角色。",
+            "scene_summary 是本组共享摘要，scene_description 是本组共享场景描述。",
+            "events 只允许使用白名单事件类型，action.action_type 只允许使用白名单行为类型。",
+            "存在显著属性变化、状态变化、物品消耗或法宝变化时，必须提供 basis.resource_basis 和 basis.effect_basis。",
+            "attribute_changes 里的数值表示账本增量；item_changes.gained/lost 使用物品名到数量的映射。",
+            "treasure_changes 中可以写 wear_delta、durability_delta、injected_spirit。",
+        ]
+
+        return (
+            "你正在为修仙模拟器生成结构化交互组更新。\n\n"
+            "输出要求:\n- " + "\n- ".join(instructions) + "\n\n"
+            "输入上下文:\n"
+            f"{json.dumps(payload, ensure_ascii=False, indent=2)}"
+        )
 
     @staticmethod
     def build_single_character_prompt(
         character: Character,
         environment: dict[str, Any],
         treasures_data: dict[str, Any],
-        techniques_data: dict[str, Any]
+        techniques_data: dict[str, Any],
     ) -> str:
-        """
-        构建单角色场景的提示词
-
-        Args:
-            character: 角色对象
-            environment: 环境信息
-            treasures_data: 法宝详细数据
-            techniques_data: 功法详细数据
-
-        Returns:
-            完整提示词
-        """
-        lines = []
-        lines.append(f"{'=' * 40} {character.name} 信息 {'=' * 40}")
-        lines.append("")
-
-        # 角色基础信息
-        lines.append("【角色信息】")
-        lines.append(f"姓名：{character.name}")
-        lines.append(f"境界：{character.realm.full_name}")
-        lines.append(f"灵根：{character.spirit_root.display_name}")
-        lines.append("")
-        lines.append("当前状态：")
-        lines.append(f"- 血量：{character.attributes.hp}")
-        lines.append(f"- 灵力：{character.attributes.mp}")
-        lines.append(f"- 神识：{character.attributes.spirit}")
-        lines.append(f"- 坐标：({character.position.x:.1f}, {character.position.y:.1f})")
-        if character.attributes.statuses:
-            lines.append(f"- 状态：{', '.join(character.attributes.statuses)}")
-        else:
-            lines.append("- 状态：正常")
-        lines.append("")
-
-        # 功法
-        if character.techniques:
-            lines.append("【功法】")
-            for tech_name, level in character.techniques.items():
-                tech_data = techniques_data.get(tech_name, {})
-                tech_desc = tech_data.get("description", "")
-                lines.append(f"- {tech_name}（第 {level} 层）{tech_desc}")
-            lines.append("")
-
-        # 装备法宝
-        if character.equipment:
-            lines.append("【法宝装备】")
-            for slot, treasure_name in character.equipment.items():
-                treasure_data = treasures_data.get(treasure_name)
-                if treasure_data:
-                    treasure_state = character.treasure_states.get(treasure_name, {})
-                    lines.append(f"{slot}: {treasure_name}")
-                    lines.append(f"   - 基础攻击：{treasure_data.get('attack_min', 0)}-{treasure_data.get('attack_max', 0)}")
-                    lines.append(f"   - 当前损耗度：{treasure_state.get('wear', treasure_data.get('wear', 100))}/100")
-                    lines.append(
-                        "   - 当前注入灵力："
-                        f"{treasure_state.get('injected_spirit', treasure_data.get('injected_spirit', 0))}/"
-                        f"{treasure_state.get('max_injected_spirit', treasure_data.get('max_injected_spirit', 20))}"
-                    )
-            lines.append("")
-
-        # 物品栏
-        if character.inventory:
-            lines.append("【物品栏】")
-            for item_name, count in character.inventory.items():
-                lines.append(f"- {item_name} × {count}")
-            lines.append("")
-
-        # 记忆
-        recent_memories = character.memory_bank.get_recent_memories(limit=5)
-        important_memories = character.memory_bank.get_important_memories(limit=5)
-        all_memories = {m.id: m for m in recent_memories + important_memories}.values()
-
-        if all_memories:
-            lines.append("【记忆/经历】")
-            for mem in sorted(all_memories, key=lambda m: m.timestamp, reverse=True):
-                lines.append(f"- {mem.content}")
-            lines.append("")
-
-        # 目标
-        top_goals = character.memory_bank.get_top_goals(limit=3)
-        if top_goals:
-            lines.append("【长期目标】")
-            for goal in top_goals:
-                progress_pct = int(goal.progress * 100)
-                lines.append(f"- {goal.description}（进度：{progress_pct}%，优先级：{goal.priority}）")
-            lines.append("")
-
-        # 环境信息
-        lines.append("【当前环境】")
-        if "location" in environment:
-            lines.append(f"【地点】{environment['location']}")
-        if "time" in environment:
-            lines.append(f"【时间】{environment['time']}")
-        if "map" in environment:
-            map_data = environment["map"]
-            lines.append(
-                f"【地图】{map_data.get('name', '')} "
-                f"范围 x:[{map_data.get('min_x')}, {map_data.get('max_x')}] "
-                f"y:[{map_data.get('min_y')}, {map_data.get('max_y')}]"
-            )
-        if "scene_type" in environment:
-            lines.append(f"【场景类型】{environment['scene_type']}")
-        for key, value in environment.items():
-            if key not in ["location", "time", "scene_type", "map", "character_positions"]:
-                lines.append(f"- {key}：{value}")
-
-        lines.append("")
-        lines.append("=" * 90)
-        lines.append("")
-        lines.append("请基于以上信息，决定角色接下来的行动。")
-        lines.append("")
-
-        return "\n".join(lines)
+        return PromptBuilder.build_group_prompt(
+            [character],
+            environment,
+            treasures_data,
+            techniques_data,
+        )
 
     @staticmethod
     def build_multi_character_prompt(
         characters: list[Character],
         environment: dict[str, Any],
         treasures_data: dict[str, Any],
-        techniques_data: dict[str, Any]
+        techniques_data: dict[str, Any],
     ) -> str:
-        """
-        构建多角色交互场景的提示词
+        return PromptBuilder.build_group_prompt(
+            characters,
+            environment,
+            treasures_data,
+            techniques_data,
+        )
 
-        Args:
-            characters: 角色列表
-            environment: 环境信息
-            treasures_data: 法宝详细数据
-            techniques_data: 功法详细数据
+    @staticmethod
+    def _character_payload(character: Character) -> dict[str, Any]:
+        recent_memories = [memory.content for memory in character.memory_bank.get_recent_memories(limit=5)]
+        goals = [
+            {
+                "description": goal.description,
+                "priority": goal.priority,
+                "progress": goal.progress,
+            }
+            for goal in character.memory_bank.get_top_goals(limit=3)
+        ]
+        return {
+            "id": character.id,
+            "name": character.name,
+            "realm": character.realm.full_name,
+            "spirit_root": character.spirit_root.display_name,
+            "attributes": {
+                "hp": {
+                    "current": character.attributes.hp.current,
+                    "max": character.attributes.hp.max,
+                },
+                "mp": {
+                    "current": character.attributes.mp.current,
+                    "max": character.attributes.mp.max,
+                },
+                "spirit": {
+                    "current": character.attributes.spirit.current,
+                    "max": character.attributes.spirit.max,
+                },
+                "statuses": list(character.attributes.statuses),
+            },
+            "position": {
+                "x": character.position.x,
+                "y": character.position.y,
+            },
+            "inventory": character.inventory,
+            "equipment": character.equipment,
+            "treasure_states": character.treasure_states,
+            "techniques": character.techniques,
+            "recent_memories": recent_memories,
+            "goals": goals,
+        }
 
-        Returns:
-            完整提示词
-        """
-        lines = []
+    @staticmethod
+    def _environment_payload(environment: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in environment.items()
+            if key in {"location", "time", "cycle", "map", "scene_type", "character_positions"}
+        }
 
-        for i, character in enumerate(characters):
-            lines.append(f"{'=' * 40} {character.name} 信息 {'=' * 40}")
-            lines.append("")
-            lines.append("【基础信息】")
-            lines.append(f"姓名：{character.name}")
-            lines.append(f"境界：{character.realm.full_name}")
-            lines.append(f"灵根：{character.spirit_root.display_name}")
-            lines.append("")
-            lines.append("【当前状态】")
-            lines.append(f"- 血量：{character.attributes.hp}")
-            lines.append(f"- 灵力：{character.attributes.mp}")
-            lines.append(f"- 神识：{character.attributes.spirit}")
-            lines.append(f"- 坐标：({character.position.x:.1f}, {character.position.y:.1f})")
-            if character.attributes.statuses:
-                lines.append(f"- 状态：{', '.join(character.attributes.statuses)}")
-            lines.append("")
+    @staticmethod
+    def _filter_relevant_treasures(
+        characters: list[Character],
+        treasures_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        relevant_names = set()
+        for character in characters:
+            relevant_names.update(character.equipment.values())
+            relevant_names.update(character.treasure_states.keys())
+        return {
+            name: treasures_data[name]
+            for name in sorted(relevant_names)
+            if name in treasures_data
+        }
 
-            if i == 0:
-                # 只对第一个角色显示完整信息
-                if character.inventory:
-                    lines.append("【物品栏】")
-                    for item_name, count in character.inventory.items():
-                        lines.append(f"- {item_name} × {count}")
-                    lines.append("")
-
-                recent_memories = character.memory_bank.get_recent_memories(limit=5)
-                if recent_memories:
-                    lines.append("【记忆/战斗认知】")
-                    for mem in recent_memories:
-                        lines.append(f"- {mem.content}")
-                    lines.append("")
-
-        lines.append("=" * 90)
-        lines.append("")
-        lines.append("【当前环境】")
-        if "location" in environment:
-            lines.append(f"【地点】{environment['location']}")
-        if "time" in environment:
-            lines.append(f"【时间】{environment['time']}")
-        if "map" in environment:
-            map_data = environment["map"]
-            lines.append(
-                f"【地图】{map_data.get('name', '')} "
-                f"范围 x:[{map_data.get('min_x')}, {map_data.get('max_x')}] "
-                f"y:[{map_data.get('min_y')}, {map_data.get('max_y')}]"
-            )
-        for key, value in environment.items():
-            if key not in ["location", "time", "map", "character_positions"]:
-                lines.append(f"- {key}：{value}")
-        lines.append("")
-        lines.append("=" * 90)
-        lines.append("")
-        lines.append("请基于以上角色的状态，输出他们接下来的行动和结果。")
-        lines.append("")
-
-        return "\n".join(lines)
+    @staticmethod
+    def _filter_relevant_techniques(
+        characters: list[Character],
+        techniques_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        relevant_names = set()
+        for character in characters:
+            relevant_names.update(character.techniques.keys())
+        return {
+            name: techniques_data[name]
+            for name in sorted(relevant_names)
+            if name in techniques_data
+        }

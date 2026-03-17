@@ -9,9 +9,25 @@ from .parser import (
     TreasureChange,
     ItemChange,
     PositionChange,
+    Intent,
+    Action,
+    ResourceBasis,
+    EffectBasis,
+    Basis,
+    GroupEvent,
+    GroupUpdate,
     CharacterChange,
+    CharacterUpdate,
 )
-from .interface import AIInterface, ChangeApplier, AICoordinator
+from .audit import (
+    ALLOWED_ACTION_TYPES,
+    ALLOWED_EVENT_TYPES,
+    AuditIssue,
+    ClippedValue,
+    AuditResult,
+    AuditValidator,
+)
+from .interface import AIInterface, ChangeApplier, AICoordinator, GroupProcessResult
 
 __all__ = [
     "PromptBuilder",
@@ -21,8 +37,23 @@ __all__ = [
     "TreasureChange",
     "ItemChange",
     "PositionChange",
+    "Intent",
+    "Action",
+    "ResourceBasis",
+    "EffectBasis",
+    "Basis",
+    "GroupEvent",
+    "GroupUpdate",
     "CharacterChange",
+    "CharacterUpdate",
+    "ALLOWED_ACTION_TYPES",
+    "ALLOWED_EVENT_TYPES",
+    "AuditIssue",
+    "ClippedValue",
+    "AuditResult",
+    "AuditValidator",
     "AIInterface",
     "ChangeApplier",
     "AICoordinator",
+    "GroupProcessResult",
 ]
